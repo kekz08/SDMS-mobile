@@ -52,14 +52,14 @@ export default function FeatureScreen() {
         <Image source={require('../assets/logo.png')} style={styles.bgLogo} />
 
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={28} color="white" />
-          </TouchableOpacity>
-          <View style={styles.logoContainer}>
-            <Text style={styles.title}>System Features</Text>
-            <Image source={require('../assets/logo.png')} style={styles.logo} />
-          </View>
+        <TouchableOpacity onPress={() => navigation.openDrawer()}>
+          <Ionicons name="menu" size={32} color="white" />
+        </TouchableOpacity>
+        <View style={styles.logoContainer}>
+          <Text style={styles.title}>SDMS</Text>
+          <Image source={require('../assets/logo.png')} style={styles.logo} />
         </View>
+      </View>
 
         <Text style={styles.heading}>Powerful Features for Scholarship Management</Text>
         <Text style={styles.subheading}>Everything you need to streamline scholarship administration</Text>

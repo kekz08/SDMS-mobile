@@ -110,11 +110,11 @@ const ScholarshipScreen = () => {
       <Image source={require('../assets/logo.png')} style={styles.bgLogo} />
 
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={28} color="white" />
+        <TouchableOpacity onPress={() => navigation.openDrawer()}>
+          <Ionicons name="menu" size={32} color="white" />
         </TouchableOpacity>
         <View style={styles.logoContainer}>
-          <Text style={styles.title}>Available Scholarships</Text>
+          <Text style={styles.title}>SDMS</Text>
           <Image source={require('../assets/logo.png')} style={styles.logo} />
         </View>
       </View>

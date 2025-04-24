@@ -19,19 +19,19 @@ export default function EducationalAidsScreen() {
     {
       id: 1,
       name: 'Academic Excellence Scholarship',
-      deadline: 'June 15, 2023',
+      deadline: 'April 24, 2024',
       requirements: 'GWA of 1.5 or better, No failing grades'
     },
     {
       id: 2,
       name: 'Financial Assistance Grant',
-      deadline: 'July 1, 2023',
+      deadline: 'April 14, 2024',
       requirements: 'Family income below 20,000/month'
     },
     {
       id: 3,
       name: 'Special Talent Scholarship',
-      deadline: 'June 30, 2023',
+      deadline: 'April 2, 2024',
       requirements: 'Proof of competition participation'
     }
   ];

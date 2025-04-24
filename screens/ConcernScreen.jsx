@@ -10,13 +10,13 @@ export default function ConcernScreen() {
   const [submittedConcerns, setSubmittedConcerns] = useState([
     {
       id: 1,
-      date: 'May 10, 2023',
+      date: 'April 10, 2025',
       message: 'I need an update on my scholarship application status',
       status: 'Resolved'
     },
     {
       id: 2,
-      date: 'May 15, 2023',
+      date: 'April 15, 2025',
       message: 'Document upload issue',
       status: 'In Progress'
     }

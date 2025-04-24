@@ -86,11 +86,11 @@ export default function ApplicationStatusScreen() {
             </View>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Date Applied:</Text>
-              <Text style={styles.detailValue}>April 15, 2023</Text>
+              <Text style={styles.detailValue}>April 15, 2025</Text>
             </View>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Decision Date:</Text>
-              <Text style={styles.detailValue}>May 2, 2023</Text>
+              <Text style={styles.detailValue}>April 2, 2025</Text>
             </View>
           </View>
         </View>

@@ -55,14 +55,14 @@ export default function AboutScreen() {
         <Image source={require('../assets/logo.png')} style={styles.bgLogo} />
 
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={28} color="white" />
-          </TouchableOpacity>
-          <View style={styles.logoContainer}>
-            <Text style={styles.title}>About SDMS</Text>
-            <Image source={require('../assets/logo.png')} style={styles.logo} />
-          </View>
+        <TouchableOpacity onPress={() => navigation.openDrawer()}>
+          <Ionicons name="menu" size={32} color="white" />
+        </TouchableOpacity>
+        <View style={styles.logoContainer}>
+          <Text style={styles.title}>SDMS</Text>
+          <Image source={require('../assets/logo.png')} style={styles.logo} />
         </View>
+      </View>
 
         <View style={styles.contentContainer}>
           <View style={styles.aboutCard}>
