@@ -132,6 +132,7 @@ const styles = {
     borderRadius: 12,
     padding: 20,
     marginBottom: 25,
+    marginTop: 15,
   },
   aboutTitle: {
     fontSize: 20,
@@ -238,5 +239,16 @@ const styles = {
     fontSize: 15,
     color: 'white',
     marginLeft: 10,
+  },
+  logoContainer: { flexDirection: 'row', alignItems: 'center' },
+  title: { fontSize: 20, fontWeight: 'bold', color: 'white', marginRight: 8 },
+  logo: { width: 40, height: 40 },
+  heading: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: 'white',
+    textAlign: 'center',
+    marginTop: 20,
+    marginHorizontal: 20,
   },
 };

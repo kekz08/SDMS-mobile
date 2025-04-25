@@ -50,15 +50,15 @@ export default function LoginScreen({ onLogin, onLogout }) {
           <LinearGradient colors={['#005500', '#007000', '#009000']} style={styles.gradient} />
           <Image source={require('../assets/logo.png')} style={styles.bgLogo} />
 
-          <View style={styles.header}>
-            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-              <Ionicons name="arrow-back" size={28} color="white" />
-            </TouchableOpacity>
-            <View style={styles.logoContainer}>
-              <Text style={styles.title}>{isLoggedIn ? 'Profile' : 'Login'}</Text>
-              <Image source={require('../assets/logo.png')} style={styles.logo} />
-            </View>
-          </View>
+        <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.openDrawer()}>
+          <Ionicons name="menu" size={32} color="white" />
+        </TouchableOpacity>
+        <View style={styles.logoContainer}>
+          <Text style={styles.title}>SDMS</Text>
+          <Image source={require('../assets/logo.png')} style={styles.logo} />
+        </View>
+      </View>
 
           <View style={styles.content}>
             <Image 

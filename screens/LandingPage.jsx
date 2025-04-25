@@ -121,7 +121,7 @@ export default function LandingPage() {
               end={{ x: 1, y: 0 }}
               style={styles.btnGradient}
             >
-              <Text style={styles.btnText}>Explore Scholarships</Text>
+              <Text style={styles.btnText}>Explore</Text>
               <Ionicons name="search" size={20} color="white" style={styles.btnIcon} />
             </LinearGradient>
           </TouchableOpacity>

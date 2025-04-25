@@ -34,12 +34,14 @@ export default function RegistrationScreen() {
         <Image source={require('../assets/logo.png')} style={styles.bgLogo} />
 
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={32} color="white" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Create Account</Text>
-          <View style={{ width: 32 }} /> {/* Spacer */}
+        <TouchableOpacity onPress={() => navigation.openDrawer()}>
+          <Ionicons name="menu" size={32} color="white" />
+        </TouchableOpacity>
+        <View style={styles.logoContainer}>
+          <Text style={styles.title}>SDMS</Text>
+          <Image source={require('../assets/logo.png')} style={styles.logo} />
         </View>
+      </View>
 
         <View style={styles.formContainer}>
           <Text style={styles.formTitle}>Scholar Registration</Text>
@@ -189,5 +191,16 @@ const styles = StyleSheet.create({
   loginLink: {
     color: '#FFA000',
     fontWeight: 'bold',
+  },
+  logoContainer: { flexDirection: 'row', alignItems: 'center' },
+  title: { fontSize: 20, fontWeight: 'bold', color: 'white', marginRight: 8 },
+  logo: { width: 40, height: 40 },
+  heading: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: 'white',
+    textAlign: 'center',
+    marginTop: 20,
+    marginHorizontal: 20,
   },
 });
