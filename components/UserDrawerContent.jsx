@@ -1,8 +1,62 @@
-import { View, Text, Image, StyleSheet } from 'react-native';
+import { useState, useEffect } from 'react';
+import { View, Text, Image, StyleSheet, Alert } from 'react-native';
 import { DrawerContentScrollView, DrawerItem } from '@react-navigation/drawer';
 import { FontAwesome5, MaterialIcons, Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const BASE_URL = 'http://192.168.254.101:3000';
 
 export default function UserDrawerContent({ navigation, onLogout }) {
+  const [userData, setUserData] = useState(null);
+  const [profileImage, setProfileImage] = useState(require('../assets/haidee.jpg')); // Default image
+
+  useEffect(() => {
+    loadUserData();
+  }, []);
+
+  const loadUserData = async () => {
+    try {
+      const userDataString = await AsyncStorage.getItem('userData');
+      if (userDataString) {
+        const parsedUserData = JSON.parse(userDataString);
+        console.log('Drawer - Loading user data:', parsedUserData);
+        setUserData(parsedUserData);
+        if (parsedUserData.profileImage) {
+          // Check if the profileImage is a relative path
+          const imageUrl = parsedUserData.profileImage.startsWith('http') 
+            ? parsedUserData.profileImage 
+            : `${BASE_URL}/${parsedUserData.profileImage}`;
+          console.log('Drawer - Setting profile image URL:', imageUrl);
+          setProfileImage({ uri: imageUrl });
+        }
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      // Clear all relevant data from AsyncStorage
+      await AsyncStorage.multiRemove([
+        'userToken',
+        'userData'
+      ]);
+      
+      // Reset state
+      setUserData(null);
+      setProfileImage(require('../assets/haidee.jpg'));
+      
+      // Call the onLogout prop
+      if (onLogout) {
+        onLogout();
+      }
+    } catch (error) {
+      console.error('Error during logout:', error);
+      Alert.alert('Error', 'Failed to logout properly. Please try again.');
+    }
+  };
+
   return (
     <DrawerContentScrollView 
       contentContainerStyle={styles.container}
@@ -11,10 +65,15 @@ export default function UserDrawerContent({ navigation, onLogout }) {
       {/* Profile Header */}
       <View style={styles.header}>
         <Image 
-          source={require('../assets/haidee.jpg')} 
+          source={profileImage}
           style={styles.profileImage} 
         />
-        <Text style={styles.name}>Haidee G. Lisondra</Text>
+        <Text style={styles.name}>
+          {userData ? `${userData.firstName} ${userData.lastName}` : 'Loading...'}
+        </Text>
+        <View style={styles.userDetails}>
+          <Text style={styles.userInfo}>ID: {userData?.studentId || ''}</Text>
+        </View>
         <View style={styles.verifiedBadge}>
           <Ionicons name="checkmark-circle" size={14} color="#00cc66" />
           <Text style={styles.verifiedText}>Verified</Text>
@@ -75,7 +134,7 @@ export default function UserDrawerContent({ navigation, onLogout }) {
         <DrawerItem
           label="Logout"
           icon={({ color, size }) => <FontAwesome5 name="sign-out-alt" color="#ff3333" size={size} />}
-          onPress={onLogout} // Call the logout function passed as a prop
+          onPress={handleLogout}
           labelStyle={[styles.label, { color: '#ff3333' }]}
         />
       </View>
@@ -107,6 +166,16 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#004d00',
     marginBottom: 5
+  },
+  userDetails: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 5
+  },
+  userInfo: {
+    fontSize: 12,
+    color: '#004d00',
+    marginRight: 10
   },
   verifiedBadge: {
     flexDirection: 'row',

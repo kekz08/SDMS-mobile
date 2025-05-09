@@ -57,7 +57,11 @@ export default function LandingPage() {
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
       <LinearGradient colors={['#005500', '#007000', '#009000']} style={styles.gradient} />
-      <Image source={require('../assets/logo.png')} style={styles.bgLogo} />
+      <Image 
+        source={require('../assets/logo.png')} 
+        style={styles.bgLogo} 
+        resizeMode="contain"
+      />
 
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.openDrawer()}>
@@ -151,7 +155,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: '140%', 
     height: '85%',
-    resizeMode: 'contain',
     opacity: 0.15,
     bottom: '8%',
     right: '-40%',
@@ -178,9 +181,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold', 
     color: 'white', 
     marginRight: 8,
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
+    textShadow: '1px 1px 2px rgba(0,0,0,0.3)',
   },
   logo: { 
     width: 45, 
@@ -241,9 +242,7 @@ const styles = StyleSheet.create({
     color: 'white', 
     textAlign: 'center', 
     marginBottom: 10,
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
+    textShadow: '1px 1px 2px rgba(0,0,0,0.3)',
   },
   description: { 
     fontSize: 16, 
@@ -262,19 +261,13 @@ const styles = StyleSheet.create({
   applyBtn: { 
     borderRadius: 10, 
     overflow: 'hidden',
-    shadowColor: '#FFD700',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
+    boxShadow: '0px 4px 6px rgba(255, 215, 0, 0.3)',
     elevation: 6,
   },
   inquireBtn: { 
     borderRadius: 10, 
     overflow: 'hidden',
-    shadowColor: '#8A2BE2',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
+    boxShadow: '0px 4px 6px rgba(138, 43, 226, 0.3)',
     elevation: 6,
   },
   btnGradient: { 

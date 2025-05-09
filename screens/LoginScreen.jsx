@@ -1,8 +1,11 @@
 import { useState } from 'react';
-import { View, Text, Image, TouchableOpacity, TextInput, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, Image, TouchableOpacity, TextInput, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const API_URL = 'http://192.168.254.101:3000/api';
 
 export default function LoginScreen({ onLogin, onLogout }) {
   const navigation = useNavigation();
@@ -13,22 +16,83 @@ export default function LoginScreen({ onLogin, onLogout }) {
 
   const isLoggedIn = !!onLogout;
 
-  const handleSubmit = () => {
-    setIsLoading(true);
-    // Simulate login process
-    setTimeout(() => {
-      setIsLoading(false);
-      if (username && password) {
-        isLoggedIn ? handleLogout() : handleLogin();
-      }
-    }, 1500);
-  };
+  const handleSubmit = async () => {
+    if (!username || !password) {
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
 
-  const handleLogin = () => {
-    if (onLogin) {
-      onLogin();
-    } else {
-      navigation.navigate('Dashboard');
+    setIsLoading(true);
+    try {
+      console.log('=== Login Process Started ===');
+      console.log('Making login request to:', `${API_URL}/login`);
+      
+      const response = await fetch(`${API_URL}/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: username,
+          password: password,
+        }),
+      });
+
+      const responseText = await response.text();
+      console.log('Raw server response:', responseText);
+
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (error) {
+        console.error('Failed to parse server response:', error);
+        throw new Error('Invalid server response');
+      }
+
+      console.log('Parsed server response:', {
+        token: data.token ? '[HIDDEN]' : undefined,
+        user: data.user ? {
+          ...data.user,
+          contactNumber: `'${data.user.contactNumber}'`,
+          address: `'${data.user.address}'`
+        } : undefined
+      });
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Login failed');
+      }
+
+      // Store the token and user data
+      console.log('=== Storing User Data ===');
+      console.log('Data to be stored:', {
+        ...data.user,
+        contactNumber: `'${data.user.contactNumber}'`,
+        address: `'${data.user.address}'`
+      });
+
+      await AsyncStorage.setItem('userToken', data.token);
+      await AsyncStorage.setItem('userData', JSON.stringify(data.user));
+
+      // Verify what was stored
+      console.log('=== Verifying Stored Data ===');
+      const storedData = await AsyncStorage.getItem('userData');
+      const parsedStoredData = JSON.parse(storedData);
+      console.log('Data retrieved from storage:', {
+        ...parsedStoredData,
+        contactNumber: `'${parsedStoredData.contactNumber}'`,
+        address: `'${parsedStoredData.address}'`
+      });
+
+      // Call onLogin and navigate to Dashboard
+      if (onLogin) {
+        onLogin();
+      }
+      navigation.navigate('Home');
+    } catch (error) {
+      console.error('Login error:', error);
+      Alert.alert('Error', error.message || 'Something went wrong');
+    } finally {
+      setIsLoading(false);
     }
   };
 

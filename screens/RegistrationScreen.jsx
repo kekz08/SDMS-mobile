@@ -1,8 +1,11 @@
 import { useState } from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet, ScrollView, TextInput } from 'react-native';
+import { View, Text, Image, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const API_URL = 'http://192.168.254.101:3000/api';
 
 export default function RegistrationScreen() {
   const navigation = useNavigation();
@@ -10,10 +13,15 @@ export default function RegistrationScreen() {
     firstName: '',
     lastName: '',
     email: '',
-    phone: '',
+    contactNumber: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    studentId: '',
+    college: '',
+    course: '',
+    address: ''
   });
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({
@@ -22,9 +30,188 @@ export default function RegistrationScreen() {
     }));
   };
 
-  const handleRegister = () => {
-    // Add registration logic here
-    navigation.navigate('EducationalAids');
+  const validateForm = () => {
+    console.log('Validating form...');
+    
+    // Check required fields
+    const requiredFields = {
+      firstName: 'First Name',
+      lastName: 'Last Name',
+      email: 'Email',
+      password: 'Password',
+      confirmPassword: 'Confirm Password',
+      studentId: 'Student ID',
+      college: 'College',
+      course: 'Course'
+    };
+
+    const missingFields = [];
+    Object.entries(requiredFields).forEach(([field, label]) => {
+      if (!formData[field]) {
+        missingFields.push(label);
+      }
+    });
+
+    if (missingFields.length > 0) {
+      console.log('Missing fields:', missingFields);
+      Alert.alert(
+        'Required Fields Missing',
+        `Please fill in the following fields:\n${missingFields.join('\n')}`
+      );
+      return false;
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      console.log('Invalid email format');
+      Alert.alert('Invalid Email', 'Please enter a valid email address');
+      return false;
+    }
+
+    // Check password match
+    if (formData.password !== formData.confirmPassword) {
+      console.log('Passwords do not match');
+      Alert.alert('Password Mismatch', 'Passwords do not match');
+      return false;
+    }
+
+    // Check password length
+    if (formData.password.length < 6) {
+      console.log('Password too short');
+      Alert.alert('Invalid Password', 'Password must be at least 6 characters long');
+      return false;
+    }
+
+    console.log('Form validation passed');
+    return true;
+  };
+
+  const handleRegister = async () => {
+    if (!validateForm()) return;
+
+    setIsLoading(true);
+    try {
+      console.log('Starting registration process...');
+      console.log('Form data:', {
+        ...formData,
+        password: '[HIDDEN]',
+        confirmPassword: '[HIDDEN]'
+      });
+
+      // Prepare data with proper null handling
+      const sanitizedData = {
+        firstName: String(formData.firstName || '').trim(),
+        lastName: String(formData.lastName || '').trim(),
+        email: String(formData.email || '').trim().toLowerCase(),
+        password: formData.password,
+        contactNumber: String(formData.contactNumber || '').trim(),
+        studentId: String(formData.studentId || '').trim(),
+        college: String(formData.college || '').trim(),
+        course: String(formData.course || '').trim(),
+        address: formData.address ? String(formData.address).trim() : null
+      };
+
+      // Remove empty strings
+      Object.keys(sanitizedData).forEach(key => {
+        if (sanitizedData[key] === '') {
+          sanitizedData[key] = null;
+        }
+      });
+
+      // Validate required fields
+      const requiredFields = ['firstName', 'lastName', 'email', 'password', 'studentId', 'college', 'course'];
+      const missingFields = requiredFields.filter(field => !sanitizedData[field]);
+      
+      if (missingFields.length > 0) {
+        Alert.alert(
+          'Missing Required Fields',
+          `Please fill in the following fields:\n${missingFields.join('\n')}`
+        );
+        return;
+      }
+
+      // Log the exact request for debugging
+      console.log('Full request details:', {
+        url: `${API_URL}/register`,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: { ...sanitizedData, password: '[HIDDEN]' }
+      });
+
+      try {
+        const response = await fetch(`${API_URL}/register`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify(sanitizedData),
+        });
+
+        // Get the raw response text first
+        const responseText = await response.text();
+        console.log('Raw response:', responseText);
+
+        // Try to parse as JSON
+        let data;
+        try {
+          data = JSON.parse(responseText);
+          console.log('Parsed response:', data);
+        } catch (e) {
+          console.error('Failed to parse response as JSON:', e);
+          throw new Error('Invalid server response format');
+        }
+
+        if (!response.ok) {
+          // Log the full error details
+          console.error('Error details:', {
+            status: response.status,
+            statusText: response.statusText,
+            data: data
+          });
+          throw new Error(data.error || data.message || 'Registration failed');
+        }
+
+        // Clear form data on success
+        setFormData({
+          firstName: '',
+          lastName: '',
+          email: '',
+          contactNumber: '',
+          password: '',
+          confirmPassword: '',
+          studentId: '',
+          college: '',
+          course: '',
+          address: ''
+        });
+
+        Alert.alert(
+          'Registration Successful',
+          'Your account has been created successfully. Please login with your credentials.',
+          [{ text: 'Proceed to Login', onPress: () => navigation.navigate('Login') }]
+        );
+
+      } catch (error) {
+        console.error('Full error details:', error);
+        Alert.alert(
+          'Registration Failed',
+          error.message || 'Failed to create account. Please try again.'
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    } catch (error) {
+      console.error('Registration error:', error);
+      Alert.alert(
+        'Registration Failed',
+        error.message || 'Failed to create account. Please try again.'
+      );
+    }
   };
 
   return (
@@ -74,8 +261,8 @@ export default function RegistrationScreen() {
           <TextInput
             style={styles.input}
             placeholder="Phone Number"
-            value={formData.phone}
-            onChangeText={(text) => handleInputChange('phone', text)}
+            value={formData.contactNumber}
+            onChangeText={(text) => handleInputChange('contactNumber', text)}
             keyboardType="phone-pad"
             placeholderTextColor="#aaa"
           />
@@ -95,6 +282,30 @@ export default function RegistrationScreen() {
             value={formData.confirmPassword}
             onChangeText={(text) => handleInputChange('confirmPassword', text)}
             secureTextEntry
+            placeholderTextColor="#aaa"
+          />
+
+          <TextInput
+            style={styles.input}
+            placeholder="Student ID"
+            value={formData.studentId}
+            onChangeText={(text) => handleInputChange('studentId', text)}
+            placeholderTextColor="#aaa"
+          />
+
+          <TextInput
+            style={styles.input}
+            placeholder="College"
+            value={formData.college}
+            onChangeText={(text) => handleInputChange('college', text)}
+            placeholderTextColor="#aaa"
+          />
+
+          <TextInput
+            style={styles.input}
+            placeholder="Course"
+            value={formData.course}
+            onChangeText={(text) => handleInputChange('course', text)}
             placeholderTextColor="#aaa"
           />
 

@@ -1,12 +1,103 @@
+import { useState, useEffect } from 'react';
 import { useNavigation } from '@react-navigation/native';
-import { View, Text, Image, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
+import { View, Text, Image, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BarChart, PieChart } from 'react-native-chart-kit';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import NotificationPopup from '../components/NotificationPopup';
+
+const API_URL = 'http://192.168.254.101:3000/api';
+const BASE_URL = 'http://192.168.254.101:3000';
 
 export default function DashboardScreen() {
   const navigation = useNavigation();
   const { width } = useWindowDimensions();
+  const [dashboardData, setDashboardData] = useState({
+    totalApplicants: 0,
+    approvedApplications: 0,
+    pendingApplications: 0
+  });
+  const [userData, setUserData] = useState(null);
+  const [profileImage, setProfileImage] = useState(null);
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  useEffect(() => {
+    loadUserData();
+    fetchDashboardData();
+  }, []);
+
+  const loadUserData = async () => {
+    try {
+      const userDataString = await AsyncStorage.getItem('userData');
+      if (userDataString) {
+        const parsedUserData = JSON.parse(userDataString);
+        setUserData(parsedUserData);
+        
+        // Handle profile image
+        if (parsedUserData.profileImage) {
+          try {
+            // Construct the full URL if it's a relative path
+            const imageUrl = parsedUserData.profileImage.startsWith('http') 
+              ? parsedUserData.profileImage 
+              : `${BASE_URL}/${parsedUserData.profileImage}`;
+            
+            console.log('Dashboard - Setting profile image URL:', imageUrl);
+            
+            // Test if the image URL is valid
+            const response = await fetch(imageUrl);
+            if (response.ok) {
+              setProfileImage({ uri: imageUrl });
+            } else {
+              console.warn('Profile image not accessible, using default');
+              setProfileImage(require('../assets/profile-placeholder.png'));
+            }
+          } catch (error) {
+            console.error('Error loading profile image:', error);
+            setProfileImage(require('../assets/profile-placeholder.png'));
+          }
+        } else {
+          console.log('No profile image set, using default');
+          setProfileImage(require('../assets/profile-placeholder.png'));
+        }
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
+      setProfileImage(require('../assets/profile-placeholder.png'));
+    }
+  };
+
+  const fetchDashboardData = async () => {
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token) {
+        navigation.navigate('Login');
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/dashboard`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          // Token expired or invalid
+          await AsyncStorage.removeItem('userToken');
+          await AsyncStorage.removeItem('userData');
+          navigation.navigate('Login');
+          return;
+        }
+        throw new Error('Failed to fetch dashboard data');
+      }
+
+      const data = await response.json();
+      setDashboardData(data);
+    } catch (error) {
+      Alert.alert('Error', error.message || 'Failed to load dashboard data');
+    }
+  };
 
   // College-wise applicants data
   const collegeData = {
@@ -18,9 +109,24 @@ export default function DashboardScreen() {
 
   // Application status data
   const statusData = [
-    { name: 'Approved', population: 215, color: '#4CAF50', legendFontColor: 'white' },
-    { name: 'Pending', population: 120, color: '#FFC107', legendFontColor: 'white' },
-    { name: 'Rejected', population: 45, color: '#F44336', legendFontColor: 'white' }
+    { 
+      name: 'Approved', 
+      population: dashboardData.approvedApplications, 
+      color: '#4CAF50', 
+      legendFontColor: 'white' 
+    },
+    { 
+      name: 'Pending', 
+      population: dashboardData.pendingApplications, 
+      color: '#FFC107', 
+      legendFontColor: 'white' 
+    },
+    { 
+      name: 'Rejected', 
+      population: dashboardData.totalApplicants - (dashboardData.approvedApplications + dashboardData.pendingApplications), 
+      color: '#F44336', 
+      legendFontColor: 'white' 
+    }
   ];
 
   // Monthly trend data
@@ -60,15 +166,34 @@ export default function DashboardScreen() {
           </TouchableOpacity>
 
           <View style={styles.profileContainer}>
-            <TouchableOpacity onPress={() => {/* navigate to notifications */}}>
-              <Ionicons name="notifications" size={26} color="white" style={styles.notificationIcon} />
+            <TouchableOpacity 
+              onPress={() => setShowNotifications(!showNotifications)}
+              style={styles.notificationButton}
+            >
+              <Ionicons 
+                name={showNotifications ? "notifications" : "notifications-outline"} 
+                size={26} 
+                color="white" 
+              />
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationBadgeText}>2</Text>
+              </View>
             </TouchableOpacity>
             <Image
-              source={require('../assets/haidee.jpg')}
+              source={profileImage || require('../assets/profile-placeholder.png')}
               style={styles.profileImage}
+              onError={() => {
+                console.log('Error loading profile image, falling back to default');
+                setProfileImage(require('../assets/profile-placeholder.png'));
+              }}
             />
           </View>
         </View>
+
+        <NotificationPopup 
+          visible={showNotifications} 
+          onClose={() => setShowNotifications(false)} 
+        />
 
         <Text style={styles.heading}>Scholarship Dashboard</Text>
 
@@ -242,7 +367,24 @@ const styles = StyleSheet.create({
     borderColor: 'white',
   },
   
-  notificationIcon: {
-    marginRight: 10,
+  notificationButton: {
+    position: 'relative',
+    padding: 5,
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: '#FF0000',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  notificationBadgeText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 });

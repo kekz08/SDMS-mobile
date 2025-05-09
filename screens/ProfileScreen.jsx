@@ -1,21 +1,47 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigation } from '@react-navigation/native';
-import { View, Text, Image, TouchableOpacity, StyleSheet, ScrollView, TextInput } from 'react-native';
+import { View, Text, Image, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
+import NetInfo from '@react-native-community/netinfo';
+
+// Use your local IP address for all platforms
+const API_URL = 'http://192.168.254.101:3000/api';
+const BASE_URL = 'http://192.168.254.101:3000';
+
+// Add a function to test server connectivity
+const testServerConnectivity = async (token) => {
+  try {
+    console.log('Testing server connectivity...');
+    const testResponse = await fetch(`${API_URL}/health`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json'
+      },
+      // Add timeout
+      timeout: 5000
+    });
+    
+    if (!testResponse.ok) {
+      throw new Error(`Server responded with status ${testResponse.status}`);
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Server connectivity test failed:', error);
+    return false;
+  }
+};
 
 export default function ProfileScreen() {
   const navigation = useNavigation();
   const [isEditing, setIsEditing] = useState(false);
-  const [userData, setUserData] = useState({
-    name: 'Haidee G. Lisondra',
-    email: 'haidee.lisondra@example.com',
-    studentId: '2020-12345',
-    college: 'College of Engineering and Information Technology',
-    course: 'Bachelor of Science in Information Technology',
-    contactNumber: '09123456789',
-    address: '123 Scholar St., Academic Village, Iligan City'
-  });
+  const [userData, setUserData] = useState(null);
+  const [profileImage, setProfileImage] = useState(require('../assets/profile-placeholder.png'));
+  const [isUploading, setIsUploading] = useState(false);
 
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
@@ -25,26 +51,341 @@ export default function ProfileScreen() {
 
   const [activeTab, setActiveTab] = useState('profile');
 
+  useEffect(() => {
+    loadUserData();
+  }, []);
+
+  const loadUserData = async () => {
+    try {
+      console.log('=== Loading User Data in ProfileScreen ===');
+      const userDataString = await AsyncStorage.getItem('userData');
+      console.log('Raw data from AsyncStorage:', userDataString);
+      
+      if (userDataString) {
+        const parsedUserData = JSON.parse(userDataString);
+        console.log('Parsed user data:', {
+          ...parsedUserData,
+          contactNumber: parsedUserData.contactNumber === null ? 'NULL' : `'${parsedUserData.contactNumber}'`,
+          address: parsedUserData.address === null ? 'NULL' : `'${parsedUserData.address}'`
+        });
+
+        // Set the user data directly from parsed data
+        setUserData(parsedUserData);
+        console.log('User data set in state:', {
+          ...parsedUserData,
+          contactNumber: parsedUserData.contactNumber === null ? 'NULL' : `'${parsedUserData.contactNumber}'`,
+          address: parsedUserData.address === null ? 'NULL' : `'${parsedUserData.address}'`
+        });
+        
+        if (parsedUserData.profileImage) {
+          const imageUrl = parsedUserData.profileImage.startsWith('http') 
+            ? parsedUserData.profileImage 
+            : `${BASE_URL}/${parsedUserData.profileImage}`;
+          console.log('Setting profile image URL:', imageUrl);
+          setProfileImage({ uri: imageUrl });
+        } else {
+          console.log('No profile image URL found, using default');
+          setProfileImage(require('../assets/profile-placeholder.png'));
+        }
+      } else {
+        console.log('No user data found in AsyncStorage');
+        setUserData(null);
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
+      console.error('Error details:', error.message);
+      setUserData(null);
+    }
+  };
+
+  // Add a useEffect to log when userData changes
+  useEffect(() => {
+    console.log('=== userData State Updated ===');
+    console.log('Current userData state:', userData ? {
+      ...userData,
+      contactNumber: userData.contactNumber === null ? 'NULL' : `'${userData.contactNumber}'`,
+      address: userData.address === null ? 'NULL' : `'${userData.address}'`
+    } : 'null');
+  }, [userData]);
+
+  const pickImage = async () => {
+    try {
+      console.log('Starting image picker...');
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (permissionResult.granted === false) {
+        Alert.alert('Permission Required', 'You need to grant permission to access your photos.');
+        return;
+      }
+
+      console.log('Launching image picker...');
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.2
+      });
+
+      console.log('Image picker result:', result.canceled ? 'canceled' : 'success');
+      
+      if (!result.canceled && result.assets[0]) {
+        const imageUri = result.assets[0].uri;
+        console.log('Image selected:', imageUri);
+        
+        // Create FormData
+        const formData = new FormData();
+        formData.append('profileImage', {
+          uri: imageUri,
+          type: 'image/jpeg',
+          name: 'profile.jpg'
+        });
+
+        await uploadProfilePicture(formData);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      console.error('Error details:', error.message);
+      Alert.alert(
+        'Error',
+        `Failed to pick image: ${error.message}. Please try again.`
+      );
+    }
+  };
+
+  const uploadProfilePicture = async (formData) => {
+    try {
+      setIsUploading(true);
+
+      // Check network connectivity first
+      const netInfo = await NetInfo.fetch();
+      if (!netInfo.isConnected) {
+        throw new Error('No internet connection. Please check your network and try again.');
+      }
+
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token) {
+        throw new Error('No authentication token found. Please log in again.');
+      }
+      
+      console.log('Starting profile picture upload...');
+      console.log('Token available:', !!token);
+      console.log('Using API URL:', API_URL);
+
+      // Test server connectivity
+      const isServerAccessible = await testServerConnectivity(token);
+      if (!isServerAccessible) {
+        throw new Error('Cannot connect to server. Make sure the server is running and accessible.');
+      }
+
+      // Proceed with upload if server is responsive
+      const response = await fetch(`${API_URL}/users/profile-picture`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        },
+        body: formData
+      });
+
+      console.log('Upload response status:', response.status);
+      const responseText = await response.text();
+      console.log('Raw response:', responseText);
+
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (e) {
+        console.error('Failed to parse response as JSON:', e);
+        throw new Error('Invalid server response format');
+      }
+
+      if (!response.ok) {
+        throw new Error(data.message || data.error || 'Failed to upload profile picture');
+      }
+
+      if (data.user) {
+        await AsyncStorage.setItem('userData', JSON.stringify(data.user));
+        setUserData(data.user);
+        if (data.user.profileImage) {
+          setProfileImage({ uri: data.user.profileImage });
+        }
+      }
+      
+      Alert.alert('Success', 'Profile picture updated successfully');
+    } catch (error) {
+      console.error('Error uploading profile picture:', error);
+      console.error('Error details:', error.message);
+      Alert.alert(
+        'Error',
+        `Failed to upload profile picture: ${error.message}`
+      );
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const handleInputChange = (field, value) => {
-    setUserData(prev => ({ ...prev, [field]: value }));
+    console.log('Updating field:', field, 'with value:', value);
+    setUserData(prev => {
+      const updated = { ...prev, [field]: value };
+      console.log('Updated user data:', updated);
+      return updated;
+    });
   };
 
   const handlePasswordChange = (field, value) => {
     setPasswordData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleSaveProfile = () => {
-    // Here you would typically send the updated data to your backend
-    setIsEditing(false);
+  const handleSaveProfile = async () => {
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      console.log('Token available:', !!token);
+      console.log('Updating profile with data:', JSON.stringify(userData, null, 2));
+
+      const response = await fetch(`${API_URL}/users/profile/`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          firstName: userData.firstName,
+          lastName: userData.lastName,
+          email: userData.email,
+          contactNumber: userData.contactNumber || '',
+          address: userData.address || ''
+        }),
+      });
+
+      console.log('Update response status:', response.status);
+      const responseText = await response.text();
+      console.log('Raw response:', responseText);
+
+      if (!response.ok) {
+        let errorMessage = 'Failed to update profile';
+        try {
+          const errorData = JSON.parse(responseText);
+          errorMessage = errorData.message || errorMessage;
+        } catch (e) {
+          console.error('Failed to parse error response:', e);
+        }
+        throw new Error(errorMessage);
+      }
+
+      const updatedData = JSON.parse(responseText);
+      console.log('Successfully updated profile. New data:', updatedData);
+      
+      // Ensure we preserve contact number and address
+      const newUserData = {
+        ...updatedData,
+        contactNumber: updatedData.contactNumber || '',
+        address: updatedData.address || ''
+      };
+      
+      await AsyncStorage.setItem('userData', JSON.stringify(newUserData));
+      setUserData(newUserData);
+      setIsEditing(false);
+      Alert.alert('Success', 'Profile updated successfully');
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      console.error('Error details:', error.message);
+      Alert.alert('Error', `Failed to update profile: ${error.message}. Please try again.`);
+    }
   };
 
-  const handleChangePassword = () => {
-    // Here you would typically send the password change request to your backend
-    setPasswordData({
-      currentPassword: '',
-      newPassword: '',
-      confirmPassword: ''
-    });
+  const handleChangePassword = async () => {
+    try {
+      // Validate passwords
+      if (!passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
+        Alert.alert('Error', 'Please fill in all password fields');
+        return;
+      }
+
+      if (passwordData.newPassword !== passwordData.confirmPassword) {
+        Alert.alert('Error', 'New password and confirm password do not match');
+        return;
+      }
+
+      if (passwordData.newPassword.length < 6) {
+        Alert.alert('Error', 'New password must be at least 6 characters long');
+        return;
+      }
+
+      // Get token
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token) {
+        Alert.alert('Error', 'Authentication token not found. Please log in again.');
+        return;
+      }
+
+      // Check network connectivity first
+      const netInfo = await NetInfo.fetch();
+      if (!netInfo.isConnected) {
+        Alert.alert('Error', 'No internet connection. Please check your network and try again.');
+        return;
+      }
+
+      // Test server connectivity
+      const isServerAccessible = await testServerConnectivity(token);
+      if (!isServerAccessible) {
+        Alert.alert('Error', 'Cannot connect to server. Please check if the server is running.');
+        return;
+      }
+
+      console.log('Making password change request to:', `${API_URL}/users/change-password`);
+      
+      // Make API call to change password
+      const response = await fetch(`${API_URL}/users/change-password`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          currentPassword: passwordData.currentPassword,
+          newPassword: passwordData.newPassword
+        }),
+      });
+
+      // Log response details for debugging
+      console.log('Response status:', response.status);
+      console.log('Response headers:', response.headers);
+
+      // Get the raw response text first
+      const responseText = await response.text();
+      console.log('Raw response:', responseText);
+
+      // Try to parse JSON
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (e) {
+        console.error('Failed to parse response as JSON:', e);
+        console.error('Raw response was:', responseText);
+        throw new Error('Server returned an invalid response. Please try again.');
+      }
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to change password');
+      }
+
+      // Clear password fields
+      setPasswordData({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      });
+
+      Alert.alert('Success', 'Password changed successfully');
+    } catch (error) {
+      console.error('Error changing password:', error);
+      console.error('Error details:', error.message);
+      Alert.alert(
+        'Error',
+        `Failed to change password: ${error.message}. Please try again.`
+      );
+    }
   };
 
   return (
@@ -64,18 +405,36 @@ export default function ProfileScreen() {
               <Ionicons name="notifications" size={26} color="white" style={styles.notificationIcon} />
             </TouchableOpacity>
             <Image
-              source={require('../assets/haidee.jpg')}
+              source={profileImage}
               style={styles.headerProfileImage}
+              onError={(e) => {
+                console.error('Error loading profile image:', e.nativeEvent.error);
+                setProfileImage(require('../assets/profile-placeholder.png'));
+              }}
             />
           </View>
         </View>
 
         <View style={styles.profileHeader}>
-          <Image 
-            source={require('../assets/haidee.jpg')} 
-            style={styles.profileImage} 
-          />
-          <Text style={styles.profileName}>{userData.name}</Text>
+          <TouchableOpacity onPress={pickImage} disabled={!isEditing || isUploading}>
+            <View style={styles.profileImageContainer}>
+              <Image
+                source={profileImage}
+                style={styles.profileImage}
+                onError={(e) => {
+                  console.error('Error loading profile image:', e.nativeEvent.error);
+                  setProfileImage(require('../assets/profile-placeholder.png'));
+                }}
+              />
+              {isEditing && (
+                <View style={styles.editOverlay}>
+                  <Ionicons name="camera" size={24} color="white" />
+                  <Text style={styles.editOverlayText}>Change Photo</Text>
+                </View>
+              )}
+            </View>
+          </TouchableOpacity>
+          <Text style={styles.profileName}>{userData?.firstName} {userData?.lastName}</Text>
           <Text style={styles.profileRole}>Scholarship Grantee</Text>
         </View>
 
@@ -102,7 +461,7 @@ export default function ProfileScreen() {
                   <Text style={styles.inputLabel}>Full Name</Text>
                   <TextInput
                     style={styles.input}
-                    value={userData.name}
+                    value={userData?.name}
                     onChangeText={(text) => handleInputChange('name', text)}
                   />
                 </View>
@@ -111,7 +470,7 @@ export default function ProfileScreen() {
                   <Text style={styles.inputLabel}>Email</Text>
                   <TextInput
                     style={styles.input}
-                    value={userData.email}
+                    value={userData?.email}
                     onChangeText={(text) => handleInputChange('email', text)}
                     keyboardType="email-address"
                   />
@@ -121,9 +480,11 @@ export default function ProfileScreen() {
                   <Text style={styles.inputLabel}>Contact Number</Text>
                   <TextInput
                     style={styles.input}
-                    value={userData.contactNumber}
+                    value={userData?.contactNumber}
                     onChangeText={(text) => handleInputChange('contactNumber', text)}
                     keyboardType="phone-pad"
+                    placeholder="Enter contact number"
+                    placeholderTextColor="#aaa"
                   />
                 </View>
 
@@ -131,9 +492,11 @@ export default function ProfileScreen() {
                   <Text style={styles.inputLabel}>Address</Text>
                   <TextInput
                     style={[styles.input, { height: 80 }]}
-                    value={userData.address}
+                    value={userData?.address}
                     onChangeText={(text) => handleInputChange('address', text)}
                     multiline
+                    placeholder="Enter address"
+                    placeholderTextColor="#aaa"
                   />
                 </View>
 
@@ -156,32 +519,40 @@ export default function ProfileScreen() {
               <>
                 <View style={styles.infoGroup}>
                   <Text style={styles.infoLabel}>Student ID</Text>
-                  <Text style={styles.infoValue}>{userData.studentId}</Text>
+                  <Text style={styles.infoValue}>{userData?.studentId}</Text>
                 </View>
 
                 <View style={styles.infoGroup}>
                   <Text style={styles.infoLabel}>College</Text>
-                  <Text style={styles.infoValue}>{userData.college}</Text>
+                  <Text style={styles.infoValue}>{userData?.college}</Text>
                 </View>
 
                 <View style={styles.infoGroup}>
                   <Text style={styles.infoLabel}>Course</Text>
-                  <Text style={styles.infoValue}>{userData.course}</Text>
+                  <Text style={styles.infoValue}>{userData?.course}</Text>
                 </View>
 
                 <View style={styles.infoGroup}>
                   <Text style={styles.infoLabel}>Email</Text>
-                  <Text style={styles.infoValue}>{userData.email}</Text>
+                  <Text style={styles.infoValue}>{userData?.email}</Text>
                 </View>
 
                 <View style={styles.infoGroup}>
                   <Text style={styles.infoLabel}>Contact Number</Text>
-                  <Text style={styles.infoValue}>{userData.contactNumber}</Text>
+                  <Text style={styles.infoValue}>
+                    {userData && userData.contactNumber !== null && userData.contactNumber !== undefined && userData.contactNumber !== '' 
+                      ? userData.contactNumber 
+                      : 'Not set'}
+                  </Text>
                 </View>
 
                 <View style={styles.infoGroup}>
                   <Text style={styles.infoLabel}>Address</Text>
-                  <Text style={styles.infoValue}>{userData.address}</Text>
+                  <Text style={styles.infoValue}>
+                    {userData && userData.address !== null && userData.address !== undefined && userData.address !== '' 
+                      ? userData.address 
+                      : 'Not set'}
+                  </Text>
                 </View>
 
                 <TouchableOpacity 
@@ -289,13 +660,36 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
   },
 
-  profileImage: {
+  profileImageContainer: {
+    position: 'relative',
     width: 120,
     height: 120,
     borderRadius: 60,
+    overflow: 'hidden',
+  },
+
+  profileImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 60,
     borderWidth: 3,
     borderColor: 'white',
-    marginBottom: 15,
+  },
+
+  editOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    padding: 8,
+    alignItems: 'center',
+  },
+
+  editOverlayText: {
+    color: 'white',
+    fontSize: 12,
+    marginTop: 2,
   },
 
   profileName: {

@@ -1,8 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import { View, Text, Image, TouchableOpacity, StyleSheet, ScrollView, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import NotificationPopup from '../components/NotificationPopup';
+
+const BASE_URL = 'http://192.168.254.101:3000';
 
 export default function ConcernScreen() {
   const navigation = useNavigation();
@@ -21,6 +25,31 @@ export default function ConcernScreen() {
       status: 'In Progress'
     }
   ]);
+  const [profileImage, setProfileImage] = useState(require('../assets/profile-placeholder.png')); // Default image
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  useEffect(() => {
+    loadUserData();
+  }, []);
+
+  const loadUserData = async () => {
+    try {
+      const userDataString = await AsyncStorage.getItem('userData');
+      if (userDataString) {
+        const parsedUserData = JSON.parse(userDataString);
+        if (parsedUserData.profileImage) {
+          // Check if the profileImage is a relative path
+          const imageUrl = parsedUserData.profileImage.startsWith('http') 
+            ? parsedUserData.profileImage 
+            : `${BASE_URL}/${parsedUserData.profileImage}`;
+          console.log('Concerns - Setting profile image URL:', imageUrl);
+          setProfileImage({ uri: imageUrl });
+        }
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
+    }
+  };
 
   const handleSubmit = () => {
     if (concern.trim()) {
@@ -58,15 +87,30 @@ export default function ConcernScreen() {
           </TouchableOpacity>
 
           <View style={styles.profileContainer}>
-            <TouchableOpacity onPress={() => {/* navigate to notifications */}}>
-              <Ionicons name="notifications" size={26} color="white" style={styles.notificationIcon} />
+            <TouchableOpacity 
+              onPress={() => setShowNotifications(!showNotifications)}
+              style={styles.notificationButton}
+            >
+              <Ionicons 
+                name={showNotifications ? "notifications" : "notifications-outline"} 
+                size={26} 
+                color="white" 
+              />
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationBadgeText}>2</Text>
+              </View>
             </TouchableOpacity>
             <Image
-              source={require('../assets/haidee.jpg')}
+              source={profileImage}
               style={styles.profileImage}
             />
           </View>
         </View>
+
+        <NotificationPopup 
+          visible={showNotifications} 
+          onClose={() => setShowNotifications(false)} 
+        />
 
         <Text style={styles.heading}>Raise a Concern</Text>
         <Text style={styles.description}>
@@ -170,8 +214,25 @@ const styles = StyleSheet.create({
     borderColor: 'white',
   },
   
-  notificationIcon: {
-    marginRight: 10,
+  notificationButton: {
+    position: 'relative',
+    padding: 5,
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: '#FF0000',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  notificationBadgeText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 
   formContainer: {
