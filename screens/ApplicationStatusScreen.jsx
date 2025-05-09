@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NotificationPopup from '../components/NotificationPopup';
+import NotificationBadge from '../components/NotificationBadge';
 
 const BASE_URL = 'http://192.168.254.101:3000';
 const API_URL = 'http://192.168.254.101:3000/api';
@@ -32,15 +33,37 @@ export default function ApplicationStatusScreen() {
       if (userDataString) {
         const parsedUserData = JSON.parse(userDataString);
         if (parsedUserData.profileImage) {
-          const imageUrl = parsedUserData.profileImage.startsWith('http') 
-            ? parsedUserData.profileImage 
-            : `${BASE_URL}/${parsedUserData.profileImage}`;
-          console.log('Application Status - Setting profile image URL:', imageUrl);
-          setProfileImage({ uri: imageUrl });
+          try {
+            // Clean up the URL path by removing any absolute path references
+            let imageUrl = parsedUserData.profileImage;
+            if (imageUrl.includes('uploads/')) {
+              // Extract just the uploads part of the path
+              imageUrl = imageUrl.substring(imageUrl.indexOf('uploads/'));
+            }
+            
+            // Construct the full URL
+            const fullImageUrl = `${BASE_URL}/${imageUrl}`;
+            console.log('Application Status - Setting profile image URL:', fullImageUrl);
+            
+            // Test if image is accessible
+            const imageResponse = await fetch(fullImageUrl);
+            if (imageResponse.ok) {
+              setProfileImage({ uri: fullImageUrl });
+            } else {
+              throw new Error(`Image not accessible: ${imageResponse.status}`);
+            }
+          } catch (error) {
+            console.error('Error loading profile image:', error);
+            setProfileImage(require('../assets/profile-placeholder.png'));
+          }
+        } else {
+          console.log('No profile image URL found, using default');
+          setProfileImage(require('../assets/profile-placeholder.png'));
         }
       }
     } catch (error) {
       console.error('Error loading user data:', error);
+      setProfileImage(require('../assets/profile-placeholder.png'));
     }
   };
 
@@ -133,6 +156,30 @@ export default function ApplicationStatusScreen() {
     }
   };
 
+  const handleReapply = async (application) => {
+    try {
+      // Store the application data in AsyncStorage for pre-filling the form
+      await AsyncStorage.setItem('reapplyData', JSON.stringify({
+        scholarshipId: application.scholarshipId,
+        previousApplication: {
+          ...application,
+          isReapplication: true,
+          previousApplicationId: application.id
+        }
+      }));
+
+      // Navigate to Educational Aids screen
+      navigation.navigate('Educational Aids', {
+        screen: 'apply',
+        scholarshipId: application.scholarshipId,
+        isReapplication: true
+      });
+    } catch (error) {
+      console.error('Error preparing reapplication:', error);
+      Alert.alert('Error', 'Failed to prepare reapplication. Please try again.');
+    }
+  };
+
   return (
     <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
       <View style={styles.container}>
@@ -159,9 +206,7 @@ export default function ApplicationStatusScreen() {
                 size={26} 
                 color="white" 
               />
-              <View style={styles.notificationBadge}>
-                <Text style={styles.notificationBadgeText}>2</Text>
-              </View>
+              <NotificationBadge />
             </TouchableOpacity>
             <Image
               source={profileImage}
@@ -227,6 +272,20 @@ export default function ApplicationStatusScreen() {
                       <View style={styles.remarksContainer}>
                         <Text style={styles.remarksLabel}>Remarks:</Text>
                         <Text style={styles.remarksText}>{application.remarks}</Text>
+                      </View>
+                    )}
+                    {application.status === 'rejected' && (
+                      <View style={styles.reapplyContainer}>
+                        <Text style={styles.reapplyNote}>
+                          Review the remarks above and consider updating your application based on the feedback.
+                        </Text>
+                        <TouchableOpacity
+                          style={styles.reapplyButton}
+                          onPress={() => handleReapply(application)}
+                        >
+                          <Ionicons name="refresh" size={20} color="white" />
+                          <Text style={styles.reapplyButtonText}>Update & Reapply</Text>
+                        </TouchableOpacity>
                       </View>
                     )}
                   </View>
@@ -440,5 +499,34 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.7)',
     fontSize: 16,
     textAlign: 'center',
+  },
+
+  reapplyContainer: {
+    marginTop: 15,
+    padding: 15,
+    backgroundColor: 'rgba(244, 67, 54, 0.1)',
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#F44336',
+  },
+  reapplyNote: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginBottom: 12,
+    fontStyle: 'italic',
+  },
+  reapplyButton: {
+    backgroundColor: '#4CAF50',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 10,
+    borderRadius: 5,
+    gap: 8,
+  },
+  reapplyButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 14,
   },
 });

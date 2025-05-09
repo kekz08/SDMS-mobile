@@ -14,7 +14,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_URL = 'http://192.168.254.101:3000/api';
+const BASE_URL = 'http://192.168.254.101:3000';
+const API_URL = `${BASE_URL}/api`;
 
 export default function UserManagementScreen({ navigation }) {
   const [users, setUsers] = useState([]);
@@ -23,6 +24,7 @@ export default function UserManagementScreen({ navigation }) {
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [filteredUsers, setFilteredUsers] = useState([]);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     fetchUsers();
@@ -31,9 +33,10 @@ export default function UserManagementScreen({ navigation }) {
   useEffect(() => {
     if (users.length > 0) {
       const filtered = users.filter(user =>
-        user.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.email.toLowerCase().includes(searchQuery.toLowerCase())
+        user.firstName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        user.lastName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        user.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        user.studentId?.toLowerCase().includes(searchQuery.toLowerCase())
       );
       setFilteredUsers(filtered);
     }
@@ -41,22 +44,60 @@ export default function UserManagementScreen({ navigation }) {
 
   const fetchUsers = async () => {
     try {
+      setLoading(true);
+      setError(null);
+      
       const token = await AsyncStorage.getItem('userToken');
-      const response = await fetch(`${API_URL}/users`, {
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      console.log('Fetching users with token:', token ? 'Token exists' : 'No token');
+      
+      const response = await fetch(`${API_URL}/admin/users`, {
+        method: 'GET',
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
         }
       });
 
+      console.log('Response status:', response.status);
+      
       if (!response.ok) {
-        throw new Error('Failed to fetch users');
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.message || 'Failed to fetch users');
       }
 
       const data = await response.json();
-      setUsers(data);
-      setFilteredUsers(data);
+      console.log('Fetched users:', data);
+      
+      // Filter out any invalid user data
+      const validUsers = data.filter(user => 
+        user && user.id && (user.firstName || user.lastName || user.email)
+      );
+
+      setUsers(validUsers);
+      setFilteredUsers(validUsers);
+      setError(null);
     } catch (error) {
-      Alert.alert('Error', error.message);
+      console.error('Error fetching users:', error);
+      setError(error.message);
+      Alert.alert(
+        'Error',
+        `Failed to load users: ${error.message}`,
+        [
+          { 
+            text: 'Retry', 
+            onPress: () => fetchUsers() 
+          },
+          {
+            text: 'OK',
+            style: 'cancel'
+          }
+        ]
+      );
     } finally {
       setLoading(false);
     }
@@ -85,47 +126,64 @@ export default function UserManagementScreen({ navigation }) {
   const deleteUser = async (userId) => {
     try {
       const token = await AsyncStorage.getItem('userToken');
-      const response = await fetch(`${API_URL}/users/${userId}`, {
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      const response = await fetch(`${API_URL}/admin/users/${userId}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
         }
       });
 
       if (!response.ok) {
-        throw new Error('Failed to delete user');
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.message || 'Failed to delete user');
       }
 
       setUsers(users.filter(user => user.id !== userId));
+      setFilteredUsers(filteredUsers.filter(user => user.id !== userId));
       Alert.alert('Success', 'User deleted successfully');
     } catch (error) {
-      Alert.alert('Error', error.message);
+      console.error('Error deleting user:', error);
+      Alert.alert('Error', `Failed to delete user: ${error.message}`);
     }
   };
 
   const updateUserRole = async (userId, newRole) => {
     try {
       const token = await AsyncStorage.getItem('userToken');
-      const response = await fetch(`${API_URL}/users/${userId}/role`, {
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      const response = await fetch(`${API_URL}/admin/users/${userId}/role`, {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
         body: JSON.stringify({ role: newRole })
       });
 
       if (!response.ok) {
-        throw new Error('Failed to update user role');
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.message || 'Failed to update user role');
       }
 
-      setUsers(users.map(user => 
+      const updatedUsers = users.map(user => 
         user.id === userId ? { ...user, role: newRole } : user
-      ));
+      );
+      setUsers(updatedUsers);
+      setFilteredUsers(updatedUsers);
       setModalVisible(false);
       Alert.alert('Success', 'User role updated successfully');
     } catch (error) {
-      Alert.alert('Error', error.message);
+      console.error('Error updating user role:', error);
+      Alert.alert('Error', `Failed to update user role: ${error.message}`);
     }
   };
 
@@ -134,6 +192,9 @@ export default function UserManagementScreen({ navigation }) {
       <View style={styles.userInfo}>
         <Text style={styles.userName}>{item.firstName} {item.lastName}</Text>
         <Text style={styles.userEmail}>{item.email}</Text>
+        {item.studentId && (
+          <Text style={styles.studentId}>ID: {item.studentId}</Text>
+        )}
         <View style={styles.roleContainer}>
           <Text style={[
             styles.roleText,
@@ -169,14 +230,16 @@ export default function UserManagementScreen({ navigation }) {
           <Ionicons name="menu" size={32} color="white" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>User Management</Text>
-        <View style={{ width: 32 }} />
+        <TouchableOpacity onPress={fetchUsers} style={styles.refreshButton}>
+          <Ionicons name="refresh" size={24} color="white" />
+        </TouchableOpacity>
       </View>
 
       <View style={styles.searchContainer}>
         <Ionicons name="search" size={20} color="rgba(255, 255, 255, 0.7)" />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search users..."
+          placeholder="Search by name, email, or ID..."
           placeholderTextColor="rgba(255, 255, 255, 0.7)"
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -184,13 +247,33 @@ export default function UserManagementScreen({ navigation }) {
       </View>
 
       {loading ? (
-        <ActivityIndicator size="large" color="white" style={styles.loader} />
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color="white" />
+          <Text style={styles.loadingText}>Loading users...</Text>
+        </View>
+      ) : error ? (
+        <View style={styles.centerContainer}>
+          <Ionicons name="alert-circle-outline" size={50} color="white" />
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={fetchUsers}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : filteredUsers.length === 0 ? (
+        <View style={styles.centerContainer}>
+          <Ionicons name="people-outline" size={50} color="rgba(255, 255, 255, 0.5)" />
+          <Text style={styles.noDataText}>
+            {searchQuery ? 'No users match your search' : 'No users found'}
+          </Text>
+        </View>
       ) : (
         <FlatList
           data={filteredUsers}
           renderItem={renderUserCard}
           keyExtractor={item => item.id.toString()}
           contentContainerStyle={styles.listContainer}
+          refreshing={loading}
+          onRefresh={fetchUsers}
         />
       )}
 
@@ -214,7 +297,10 @@ export default function UserManagementScreen({ navigation }) {
               ]}
               onPress={() => updateUserRole(selectedUser?.id, 'user')}
             >
-              <Text style={styles.roleButtonText}>User</Text>
+              <Text style={[
+                styles.roleButtonText,
+                selectedUser?.role === 'user' && styles.selectedRoleText
+              ]}>User</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -224,7 +310,10 @@ export default function UserManagementScreen({ navigation }) {
               ]}
               onPress={() => updateUserRole(selectedUser?.id, 'admin')}
             >
-              <Text style={styles.roleButtonText}>Admin</Text>
+              <Text style={[
+                styles.roleButtonText,
+                selectedUser?.role === 'admin' && styles.selectedRoleText
+              ]}>Admin</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -262,6 +351,9 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: 'white',
   },
+  refreshButton: {
+    padding: 5,
+  },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -275,6 +367,40 @@ const styles = StyleSheet.create({
     color: 'white',
     paddingVertical: 10,
     paddingHorizontal: 10,
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  loadingText: {
+    color: 'white',
+    fontSize: 16,
+    marginTop: 10,
+  },
+  errorText: {
+    color: 'white',
+    fontSize: 16,
+    textAlign: 'center',
+    marginTop: 10,
+  },
+  noDataText: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 16,
+    textAlign: 'center',
+    marginTop: 10,
+  },
+  retryButton: {
+    backgroundColor: '#FFA000',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 5,
+    marginTop: 15,
+  },
+  retryButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
   },
   listContainer: {
     padding: 15,
@@ -301,6 +427,12 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 2,
   },
+  studentId: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 2,
+    fontStyle: 'italic',
+  },
   roleContainer: {
     marginTop: 5,
   },
@@ -315,11 +447,6 @@ const styles = StyleSheet.create({
   actionButton: {
     padding: 8,
     borderRadius: 5,
-  },
-  loader: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   modalContainer: {
     flex: 1,
@@ -359,6 +486,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
+  },
+  selectedRoleText: {
+    color: 'white',
   },
   cancelButton: {
     marginTop: 10,

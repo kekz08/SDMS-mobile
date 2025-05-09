@@ -6,6 +6,7 @@ const db = require('./config/db');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { authenticateToken, isAdmin } = require('./middleware/auth');
 require('dotenv').config();
 
 const app = express();
@@ -105,32 +106,6 @@ app.use((req, res, next) => {
 
 // Handle OPTIONS requests
 app.options('*', cors());
-
-// Middleware to authenticate JWT token
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) {
-    return res.status(401).json({ message: 'No token provided' });
-  }
-
-  jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret_key', (err, user) => {
-    if (err) {
-      return res.status(403).json({ message: 'Invalid token' });
-    }
-    req.user = user;
-    next();
-  });
-};
-
-// Middleware to check if user is admin
-const isAdmin = (req, res, next) => {
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({ message: 'Access denied. Admin only.' });
-  }
-  next();
-};
 
 // Login endpoint
 app.post('/api/login', async (req, res) => {
@@ -397,18 +372,54 @@ app.get('/api/dashboard', authenticateToken, async (req, res) => {
 });
 
 // Admin route - Get all users
-app.get('/api/users', authenticateToken, isAdmin, async (req, res) => {
+app.get('/api/admin/users', authenticateToken, isAdmin, async (req, res) => {
   try {
-    const [users] = await db.execute('SELECT id, firstName, lastName, email, studentId, college, course, role, created_at FROM users');
-    res.json(users);
+    console.log('=== Fetching All Users ===');
+    console.log('Admin ID:', req.user.userId);
+
+    const [users] = await db.execute(`
+      SELECT 
+        id, 
+        firstName, 
+        lastName, 
+        email, 
+        studentId, 
+        college, 
+        course, 
+        role, 
+        contactNumber,
+        address,
+        profileImage,
+        createdAt,
+        updatedAt
+      FROM users
+      ORDER BY createdAt DESC
+    `);
+
+    // Convert file paths to full URLs for profile images
+    const baseUrl = `http://${process.env.HOST || '192.168.254.101'}:${process.env.PORT || 3000}`;
+    const usersWithFullUrls = users.map(user => ({
+      ...user,
+      profileImage: user.profileImage 
+        ? (user.profileImage.startsWith('http') 
+          ? user.profileImage 
+          : `${baseUrl}/${user.profileImage}`)
+        : null
+    }));
+
+    console.log(`Found ${users.length} users`);
+    res.json(usersWithFullUrls);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error fetching users:', error);
+    res.status(500).json({ 
+      message: 'Failed to fetch users',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 
 // Admin route - Update user role
-app.patch('/api/users/:id/role', authenticateToken, isAdmin, async (req, res) => {
+app.patch('/api/admin/users/:id/role', authenticateToken, isAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { role } = req.body;
@@ -420,8 +431,62 @@ app.patch('/api/users/:id/role', authenticateToken, isAdmin, async (req, res) =>
     await db.execute('UPDATE users SET role = ? WHERE id = ?', [role, id]);
     res.json({ message: 'User role updated successfully' });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error updating user role:', error);
+    res.status(500).json({ message: 'Failed to update user role' });
+  }
+});
+
+// Admin route - Delete user
+app.delete('/api/admin/users/:id', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Check if user exists
+    const [user] = await db.execute('SELECT id, profileImage FROM users WHERE id = ?', [id]);
+    if (user.length === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Delete user's profile image if it exists
+    if (user[0].profileImage) {
+      const imagePath = path.join(__dirname, user[0].profileImage);
+      if (fs.existsSync(imagePath)) {
+        fs.unlinkSync(imagePath);
+      }
+    }
+
+    // Delete user's applications and related documents
+    const [applications] = await db.execute(
+      'SELECT documents FROM applications WHERE userId = ?',
+      [id]
+    );
+
+    // Delete application documents
+    for (const app of applications) {
+      if (app.documents) {
+        const docs = JSON.parse(app.documents);
+        for (const path of Object.values(docs)) {
+          const docPath = path.join(__dirname, path);
+          if (fs.existsSync(docPath)) {
+            fs.unlinkSync(docPath);
+          }
+        }
+      }
+    }
+
+    // Delete user's applications
+    await db.execute('DELETE FROM applications WHERE userId = ?', [id]);
+
+    // Delete user's notifications
+    await db.execute('DELETE FROM notifications WHERE userId = ?', [id]);
+
+    // Finally, delete the user
+    await db.execute('DELETE FROM users WHERE id = ?', [id]);
+
+    res.json({ message: 'User and all related data deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting user:', error);
+    res.status(500).json({ message: 'Failed to delete user' });
   }
 });
 
@@ -1210,16 +1275,15 @@ app.get('/api/announcements', async (req, res) => {
 app.get('/api/admin/announcements', authenticateToken, isAdmin, async (req, res) => {
   try {
     const [announcements] = await db.execute(`
-      SELECT id, title, content, priority, status, createdAt, updatedAt
-      FROM announcements
-      ORDER BY 
-        CASE priority
-          WHEN 'high' THEN 1
-          WHEN 'normal' THEN 2
-          WHEN 'low' THEN 3
-        END,
-        createdAt DESC
+      SELECT 
+        a.*,
+        u.firstName,
+        u.lastName
+      FROM announcements a
+      LEFT JOIN users u ON a.createdBy = u.id
+      ORDER BY a.createdAt DESC
     `);
+
     res.json(announcements);
   } catch (error) {
     console.error('Error fetching announcements:', error);
@@ -1230,7 +1294,102 @@ app.get('/api/admin/announcements', authenticateToken, isAdmin, async (req, res)
 // Admin route - Create announcement
 app.post('/api/admin/announcements', authenticateToken, isAdmin, async (req, res) => {
   try {
-    const { title, content, priority = 'normal', status = 'active' } = req.body;
+    console.log('=== Create Announcement Request ===');
+    console.log('Request body:', req.body);
+    console.log('User:', req.user);
+    
+    const { title, content, priority = 'normal', status = 'active', createdBy } = req.body;
+
+    // Validate required fields with detailed logging
+    console.log('Validating fields:', { title, content, createdBy });
+    if (!title || !content || !createdBy) {
+      console.log('Missing required fields:', { title: !title, content: !content, createdBy: !createdBy });
+      return res.status(400).json({ 
+        message: 'Required fields missing',
+        required: {
+          title: !title,
+          content: !content,
+          createdBy: !createdBy
+        }
+      });
+    }
+
+    // Validate priority with logging
+    console.log('Validating priority:', priority);
+    if (!['high', 'normal', 'low'].includes(priority)) {
+      console.log('Invalid priority:', priority);
+      return res.status(400).json({ message: 'Invalid priority value' });
+    }
+
+    // Validate status with logging
+    console.log('Validating status:', status);
+    if (!['active', 'inactive'].includes(status)) {
+      console.log('Invalid status:', status);
+      return res.status(400).json({ message: 'Invalid status value' });
+    }
+
+    console.log('Creating announcement with values:', {
+      title, content, priority, status, createdBy
+    });
+
+    // Log the exact SQL query
+    const query = 'INSERT INTO announcements (title, content, priority, status, createdBy) VALUES (?, ?, ?, ?, ?)';
+    const values = [title, content, priority, status, createdBy];
+    console.log('SQL Query:', query);
+    console.log('SQL Values:', values);
+
+    const [result] = await db.execute(query, values);
+
+    console.log('Announcement created successfully:', {
+      announcementId: result.insertId
+    });
+
+    // Create notifications for all users except admins
+    console.log('Creating notifications for users...');
+    const [users] = await db.execute('SELECT id FROM users WHERE role = ?', ['user']);
+    
+    if (users.length > 0) {
+      console.log(`Found ${users.length} users to notify`);
+      // Escape the title to prevent SQL injection
+      const escapedTitle = title.replace(/'/g, "''");
+      const notificationValues = users.map(user => 
+        `(${user.id}, 'New Announcement: ${escapedTitle}', '${escapedTitle}', 'info')`
+      ).join(',');
+
+      const notificationQuery = `
+        INSERT INTO notifications (userId, title, message, type)
+        VALUES ${notificationValues}
+      `;
+      console.log('Creating notifications with query:', notificationQuery);
+      await db.execute(notificationQuery);
+      console.log('Notifications created successfully');
+    }
+
+    res.status(201).json({
+      message: 'Announcement created successfully',
+      announcementId: result.insertId
+    });
+  } catch (error) {
+    console.error('Error creating announcement:', error);
+    console.error('Error details:', {
+      message: error.message,
+      code: error.code,
+      sqlState: error.sqlState,
+      sqlMessage: error.sqlMessage,
+      stack: error.stack
+    });
+    res.status(500).json({ 
+      message: 'Failed to create announcement',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Admin route - Update announcement
+app.put('/api/admin/announcements/:id', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, content, priority, status } = req.body;
 
     // Validate required fields
     if (!title || !content) {
@@ -1254,59 +1413,13 @@ app.post('/api/admin/announcements', authenticateToken, isAdmin, async (req, res
     }
 
     const [result] = await db.execute(
-      'INSERT INTO announcements (title, content, priority, status) VALUES (?, ?, ?, ?)',
-      [title, content, priority, status]
-    );
-
-    res.status(201).json({
-      message: 'Announcement created successfully',
-      announcementId: result.insertId
-    });
-  } catch (error) {
-    console.error('Error creating announcement:', error);
-    res.status(500).json({ message: 'Failed to create announcement' });
-  }
-});
-
-// Admin route - Update announcement
-app.put('/api/admin/announcements/:id', authenticateToken, isAdmin, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { title, content, priority, status } = req.body;
-
-    // Validate required fields
-    if (!title || !content || !priority || !status) {
-      return res.status(400).json({ 
-        message: 'Required fields missing',
-        required: {
-          title: !title,
-          content: !content,
-          priority: !priority,
-          status: !status
-        }
-      });
-    }
-
-    // Validate priority
-    if (!['high', 'normal', 'low'].includes(priority)) {
-      return res.status(400).json({ message: 'Invalid priority value' });
-    }
-
-    // Validate status
-    if (!['active', 'inactive'].includes(status)) {
-      return res.status(400).json({ message: 'Invalid status value' });
-    }
-
-    // Check if announcement exists
-    const [existing] = await db.execute('SELECT id FROM announcements WHERE id = ?', [id]);
-    if (existing.length === 0) {
-      return res.status(404).json({ message: 'Announcement not found' });
-    }
-
-    await db.execute(
       'UPDATE announcements SET title = ?, content = ?, priority = ?, status = ? WHERE id = ?',
       [title, content, priority, status, id]
     );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Announcement not found' });
+    }
 
     res.json({ message: 'Announcement updated successfully' });
   } catch (error) {
@@ -1515,6 +1628,507 @@ app.get('/api/user/applications', authenticateToken, async (req, res) => {
       message: 'Failed to fetch applications',
       error: error.message
     });
+  }
+});
+
+// Create a notification
+app.post('/api/notifications', authenticateToken, async (req, res) => {
+  try {
+    const { userId, title, message, type = 'info' } = req.body;
+
+    // Validate required fields
+    if (!userId || !title || !message) {
+      return res.status(400).json({ 
+        message: 'Required fields missing',
+        required: {
+          userId: !userId,
+          title: !title,
+          message: !message
+        }
+      });
+    }
+
+    // Validate type
+    if (!['success', 'error', 'info'].includes(type)) {
+      return res.status(400).json({ message: 'Invalid notification type' });
+    }
+
+    const [result] = await db.execute(
+      'INSERT INTO notifications (userId, title, message, type) VALUES (?, ?, ?, ?)',
+      [userId, title, message, type]
+    );
+
+    res.status(201).json({
+      message: 'Notification created successfully',
+      notificationId: result.insertId
+    });
+  } catch (error) {
+    console.error('Error creating notification:', error);
+    res.status(500).json({ message: 'Failed to create notification' });
+  }
+});
+
+// Get user notifications
+app.get('/api/notifications', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const [notifications] = await db.execute(
+      'SELECT * FROM notifications WHERE userId = ? ORDER BY createdAt DESC',
+      [userId]
+    );
+
+    res.json(notifications);
+  } catch (error) {
+    console.error('Error fetching notifications:', error);
+    res.status(500).json({ message: 'Failed to fetch notifications' });
+  }
+});
+
+// Mark notification as read
+app.patch('/api/notifications/:id/read', authenticateToken, async (req, res) => {
+  try {
+    const notificationId = req.params.id;
+    const userId = req.user.userId;
+
+    // First check if the notification belongs to the user
+    const [notification] = await db.execute(
+      'SELECT userId FROM notifications WHERE id = ?',
+      [notificationId]
+    );
+
+    if (notification.length === 0) {
+      return res.status(404).json({ message: 'Notification not found' });
+    }
+
+    if (notification[0].userId !== userId) {
+      return res.status(403).json({ message: 'Not authorized to update this notification' });
+    }
+
+    await db.execute(
+      'UPDATE notifications SET isRead = TRUE WHERE id = ?',
+      [notificationId]
+    );
+
+    res.json({ message: 'Notification marked as read' });
+  } catch (error) {
+    console.error('Error marking notification as read:', error);
+    res.status(500).json({ message: 'Failed to mark notification as read' });
+  }
+});
+
+// Get unread notification count
+app.get('/api/notifications/unread/count', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const [result] = await db.execute(
+      'SELECT COUNT(*) as count FROM notifications WHERE userId = ? AND isRead = FALSE',
+      [userId]
+    );
+
+    res.json({ count: result[0].count });
+  } catch (error) {
+    console.error('Error fetching unread notification count:', error);
+    res.status(500).json({ message: 'Failed to fetch unread notification count' });
+  }
+});
+
+// Admin route - Get reports and analytics
+app.get('/api/admin/reports', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    console.log('=== Fetching Admin Reports ===');
+    console.log('User ID:', req.user.userId);
+
+    // Get total users
+    const [totalUsers] = await db.execute('SELECT COUNT(*) as count FROM users');
+
+    // Get total scholarships
+    const [totalScholarships] = await db.execute('SELECT COUNT(*) as count FROM scholarships');
+
+    // Get total applications and approval rate
+    const [applications] = await db.execute(`
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved
+      FROM applications
+    `);
+
+    // Calculate approval rate
+    const approvalRate = applications[0].total > 0 
+      ? Math.round((applications[0].approved / applications[0].total) * 100) 
+      : 0;
+
+    // Get monthly applications for the last 6 months
+    const [monthlyApplications] = await db.execute(`
+      SELECT 
+        DATE_FORMAT(createdAt, '%b') as month,
+        COUNT(*) as count
+      FROM applications
+      WHERE createdAt >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
+      GROUP BY DATE_FORMAT(createdAt, '%Y-%m')
+      ORDER BY createdAt ASC
+    `);
+
+    // Get scholarship distribution
+    const [scholarshipDistribution] = await db.execute(`
+      SELECT 
+        s.name,
+        COUNT(a.id) as count
+      FROM scholarships s
+      LEFT JOIN applications a ON s.id = a.scholarshipId
+      GROUP BY s.id, s.name
+      ORDER BY count DESC
+      LIMIT 5
+    `);
+
+    // Get status distribution
+    const [statusDistribution] = await db.execute(`
+      SELECT 
+        status,
+        COUNT(*) as count
+      FROM applications
+      GROUP BY status
+    `);
+
+    const reportData = {
+      totalUsers: totalUsers[0].count,
+      totalScholarships: totalScholarships[0].count,
+      totalApplications: applications[0].total,
+      approvalRate: approvalRate,
+      monthlyApplications: monthlyApplications,
+      scholarshipDistribution: scholarshipDistribution,
+      statusDistribution: statusDistribution
+    };
+
+    console.log('Report data:', reportData);
+    res.json(reportData);
+  } catch (error) {
+    console.error('Error generating reports:', error);
+    res.status(500).json({ 
+      message: 'Failed to generate reports',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Concerns API endpoints
+app.get('/api/concerns', authenticateToken, async (req, res) => {
+  try {
+    console.log('=== Fetching User Concerns ===');
+    console.log('User:', req.user);
+    
+    const userId = req.user.userId;
+    const [concerns] = await db.execute(
+      'SELECT * FROM concerns WHERE userId = ? ORDER BY createdAt DESC',
+      [userId]
+    );
+
+    console.log('Found concerns:', concerns.length);
+    res.json(concerns); // Send the array directly, not wrapped in an object
+  } catch (error) {
+    console.error('Error fetching concerns:', error);
+    res.status(500).json({ message: 'Failed to fetch concerns' });
+  }
+});
+
+app.post('/api/concerns', authenticateToken, async (req, res) => {
+  let connection;
+  try {
+    console.log('=== Creating New Concern ===');
+    console.log('Request body:', req.body);
+    console.log('User:', req.user);
+
+    const { title, message, category } = req.body;
+    const userId = req.user.userId;
+
+    // Validate required fields
+    if (!title || !message || !category) {
+      return res.status(400).json({ 
+        message: 'Missing required fields',
+        required: {
+          title: !title,
+          message: !message,
+          category: !category
+        }
+      });
+    }
+
+    // Validate category
+    const validCategories = ['scholarship', 'application', 'technical', 'other'];
+    if (!validCategories.includes(category)) {
+      return res.status(400).json({ 
+        message: 'Invalid category',
+        validCategories
+      });
+    }
+
+    // Get a connection and start transaction
+    connection = await db.getConnection();
+    await connection.beginTransaction();
+    console.log('Transaction started');
+
+    // Insert the concern
+    const [result] = await connection.execute(
+      'INSERT INTO concerns (title, message, category, userId) VALUES (?, ?, ?, ?)',
+      [title, message, category, userId]
+    );
+    console.log('Concern created with ID:', result.insertId);
+
+    // Get the created concern
+    const [concerns] = await connection.execute(
+      'SELECT * FROM concerns WHERE id = ?',
+      [result.insertId]
+    );
+
+    if (!concerns.length) {
+      throw new Error('Failed to retrieve created concern');
+    }
+
+    const createdConcern = concerns[0];
+    console.log('Created concern:', createdConcern);
+
+    // Find admin users
+    console.log('Finding admin users...');
+    const [adminUsers] = await connection.execute(
+      'SELECT id, email FROM users WHERE role = ?',
+      ['admin']
+    );
+    console.log('Found admin users:', adminUsers);
+
+    if (adminUsers.length > 0) {
+      // Create notifications for each admin
+      for (const admin of adminUsers) {
+        console.log('Creating notification for admin:', admin);
+        await connection.execute(
+          'INSERT INTO notifications (userId, title, message, type) VALUES (?, ?, ?, ?)',
+          [
+            admin.id,
+            'New Concern Submitted',
+            `A new concern "${title}" has been submitted by a user and requires your attention.`,
+            'info'
+          ]
+        );
+      }
+      console.log('Admin notifications created successfully');
+    } else {
+      console.log('No admin users found to notify');
+    }
+
+    // Commit the transaction
+    await connection.commit();
+    console.log('Transaction committed');
+
+    res.status(201).json(createdConcern);
+  } catch (error) {
+    console.error('Error in concern creation:', error);
+    
+    if (connection) {
+      try {
+        await connection.rollback();
+        console.log('Transaction rolled back');
+      } catch (rollbackError) {
+        console.error('Error rolling back:', rollbackError);
+      }
+    }
+
+    res.status(500).json({ 
+      message: 'Failed to create concern',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  } finally {
+    if (connection) {
+      try {
+        connection.release();
+        console.log('Connection released');
+      } catch (releaseError) {
+        console.error('Error releasing connection:', releaseError);
+      }
+    }
+  }
+});
+
+app.put('/api/concerns/:id', authenticateToken, isAdmin, async (req, res) => {
+  let connection;
+  try {
+    console.log('\n=== Update Concern Request ===');
+    const { id } = req.params;
+    const { status, adminResponse } = req.body;
+    
+    console.log('1. Request data:', {
+      concernId: id,
+      status,
+      adminResponse,
+      userId: req.user.userId,
+      userRole: req.user.role
+    });
+
+    // Validate admin role again
+    if (req.user.role !== 'admin') {
+      console.log('User is not admin:', req.user);
+      return res.status(403).json({ message: 'Not authorized to update concerns' });
+    }
+
+    // Validate status value
+    const validStatuses = ['pending', 'in_progress', 'resolved'];
+    if (status && !validStatuses.includes(status)) {
+      console.log('Invalid status value:', status);
+      return res.status(400).json({ 
+        message: 'Invalid status value. Must be one of: pending, in_progress, resolved',
+        validStatuses
+      });
+    }
+
+    // Get a connection from the pool
+    console.log('2. Getting database connection...');
+    connection = await db.getConnection();
+    console.log('3. Database connection acquired');
+    
+    // Start transaction
+    console.log('4. Starting transaction...');
+    await connection.beginTransaction();
+    console.log('5. Transaction started');
+
+    // Get current concern data
+    console.log('6. Fetching current concern data...');
+    const [currentConcern] = await connection.execute(
+      'SELECT * FROM concerns WHERE id = ?',
+      [id]
+    );
+
+    console.log('7. Current concern data:', currentConcern[0] || 'Not found');
+
+    if (currentConcern.length === 0) {
+      console.log('Concern not found, rolling back...');
+      await connection.rollback();
+      return res.status(404).json({ message: 'Concern not found' });
+    }
+
+    // Use existing values if not provided
+    const updatedStatus = status || currentConcern[0].status;
+    const updatedResponse = adminResponse !== undefined ? adminResponse : currentConcern[0].adminResponse;
+
+    console.log('8. Update values prepared:', {
+      status: updatedStatus,
+      adminResponse: updatedResponse
+    });
+
+    // Update the concern
+    console.log('9. Executing update query...');
+    const updateResult = await connection.execute(
+      'UPDATE concerns SET status = ?, adminResponse = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
+      [updatedStatus, updatedResponse, id]
+    );
+    console.log('10. Update query result:', updateResult[0]);
+
+    // Verify the update
+    console.log('11. Verifying update...');
+    const [updatedConcern] = await connection.execute(
+      'SELECT c.*, u.firstName, u.lastName FROM concerns c JOIN users u ON c.userId = u.id WHERE c.id = ?',
+      [id]
+    );
+    console.log('12. Updated concern:', updatedConcern[0] || 'Not found');
+
+    if (updatedConcern.length === 0) {
+      console.log('Failed to verify update, rolling back...');
+      await connection.rollback();
+      throw new Error('Failed to verify concern update');
+    }
+
+    // Create notification
+    console.log('13. Creating notification...');
+    const notificationMessage = `Your concern "${updatedConcern[0].title}" has been ${updatedStatus}${updatedResponse ? `. Admin response: ${updatedResponse}` : ''}`;
+    
+    // Determine notification type based on status
+    let notificationType;
+    switch (updatedStatus) {
+      case 'resolved':
+        notificationType = 'success';
+        break;
+      case 'in_progress':
+      case 'pending':
+        notificationType = 'info';
+        break;
+      default:
+        notificationType = 'info';
+    }
+    
+    try {
+      const [notificationResult] = await connection.execute(
+        'INSERT INTO notifications (userId, title, message, type) VALUES (?, ?, ?, ?)',
+        [
+          updatedConcern[0].userId,
+          'Concern Status Updated',
+          notificationMessage,
+          notificationType
+        ]
+      );
+      console.log('14. Notification created:', notificationResult);
+    } catch (notificationError) {
+      console.error('Error creating notification:', notificationError);
+      await connection.rollback();
+      throw new Error('Failed to create notification: ' + notificationError.message);
+    }
+
+    // Commit the transaction
+    console.log('15. Committing transaction...');
+    await connection.commit();
+    console.log('16. Transaction committed successfully');
+    
+    console.log('17. Sending success response');
+    res.json(updatedConcern[0]);
+
+  } catch (error) {
+    console.error('\n=== Error in concern update transaction ===');
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      sqlState: error.sqlState,
+      sqlMessage: error.sqlMessage
+    });
+
+    if (connection) {
+      try {
+        console.log('Rolling back transaction...');
+        await connection.rollback();
+        console.log('Transaction rolled back successfully');
+      } catch (rollbackError) {
+        console.error('Error rolling back transaction:', rollbackError);
+      }
+    }
+
+    res.status(500).json({ 
+      message: 'Failed to update concern',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      details: process.env.NODE_ENV === 'development' ? {
+        code: error.code,
+        sqlState: error.sqlState,
+        sqlMessage: error.sqlMessage
+      } : undefined
+    });
+  } finally {
+    if (connection) {
+      try {
+        console.log('Releasing database connection...');
+        connection.release();
+        console.log('Database connection released');
+      } catch (releaseError) {
+        console.error('Error releasing connection:', releaseError);
+      }
+    }
+  }
+});
+
+app.get('/api/admin/concerns', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    const [concerns] = await db.execute(
+      'SELECT c.*, u.firstName, u.lastName FROM concerns c JOIN users u ON c.userId = u.id ORDER BY c.createdAt DESC'
+    );
+    res.json({ concerns });
+  } catch (error) {
+    console.error('Error fetching concerns:', error);
+    res.status(500).json({ message: 'Failed to fetch concerns' });
   }
 });
 

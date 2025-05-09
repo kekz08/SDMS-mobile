@@ -6,6 +6,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import NetInfo from '@react-native-community/netinfo';
+import NotificationPopup from '../components/NotificationPopup';
+import NotificationBadge from '../components/NotificationBadge';
 
 // Use your local IP address for all platforms
 const API_URL = 'http://192.168.254.101:3000/api';
@@ -50,6 +52,7 @@ export default function ProfileScreen() {
   });
 
   const [activeTab, setActiveTab] = useState('profile');
+  const [showNotifications, setShowNotifications] = useState(false);
 
   useEffect(() => {
     loadUserData();
@@ -71,18 +74,32 @@ export default function ProfileScreen() {
 
         // Set the user data directly from parsed data
         setUserData(parsedUserData);
-        console.log('User data set in state:', {
-          ...parsedUserData,
-          contactNumber: parsedUserData.contactNumber === null ? 'NULL' : `'${parsedUserData.contactNumber}'`,
-          address: parsedUserData.address === null ? 'NULL' : `'${parsedUserData.address}'`
-        });
         
+        // Handle profile image URL
         if (parsedUserData.profileImage) {
-          const imageUrl = parsedUserData.profileImage.startsWith('http') 
-            ? parsedUserData.profileImage 
-            : `${BASE_URL}/${parsedUserData.profileImage}`;
-          console.log('Setting profile image URL:', imageUrl);
-          setProfileImage({ uri: imageUrl });
+          try {
+            // Clean up the URL path by removing any absolute path references
+            let imageUrl = parsedUserData.profileImage;
+            if (imageUrl.includes('uploads/')) {
+              // Extract just the uploads part of the path
+              imageUrl = imageUrl.substring(imageUrl.indexOf('uploads/'));
+            }
+            
+            // Construct the full URL
+            const fullImageUrl = `${BASE_URL}/${imageUrl}`;
+            console.log('Setting profile image URL:', fullImageUrl);
+            
+            // Test if image is accessible
+            const imageResponse = await fetch(fullImageUrl);
+            if (imageResponse.ok) {
+              setProfileImage({ uri: fullImageUrl });
+            } else {
+              throw new Error(`Image not accessible: ${imageResponse.status}`);
+            }
+          } catch (error) {
+            console.error('Error loading profile image:', error);
+            setProfileImage(require('../assets/profile-placeholder.png'));
+          }
         } else {
           console.log('No profile image URL found, using default');
           setProfileImage(require('../assets/profile-placeholder.png'));
@@ -95,6 +112,7 @@ export default function ProfileScreen() {
       console.error('Error loading user data:', error);
       console.error('Error details:', error.message);
       setUserData(null);
+      setProfileImage(require('../assets/profile-placeholder.png'));
     }
   };
 
@@ -204,10 +222,18 @@ export default function ProfileScreen() {
       }
 
       if (data.user) {
+        // Update AsyncStorage and state with new user data
         await AsyncStorage.setItem('userData', JSON.stringify(data.user));
         setUserData(data.user);
+        
+        // Handle the profile image URL
         if (data.user.profileImage) {
-          setProfileImage({ uri: data.user.profileImage });
+          let imageUrl = data.user.profileImage;
+          if (imageUrl.includes('uploads/')) {
+            imageUrl = imageUrl.substring(imageUrl.indexOf('uploads/'));
+          }
+          const fullImageUrl = `${BASE_URL}/${imageUrl}`;
+          setProfileImage({ uri: fullImageUrl });
         }
       }
       
@@ -401,8 +427,16 @@ export default function ProfileScreen() {
           </TouchableOpacity>
 
           <View style={styles.profileContainer}>
-            <TouchableOpacity onPress={() => {/* navigate to notifications */}}>
-              <Ionicons name="notifications" size={26} color="white" style={styles.notificationIcon} />
+            <TouchableOpacity 
+              onPress={() => setShowNotifications(!showNotifications)}
+              style={styles.notificationButton}
+            >
+              <Ionicons 
+                name={showNotifications ? "notifications" : "notifications-outline"} 
+                size={26} 
+                color="white" 
+              />
+              <NotificationBadge />
             </TouchableOpacity>
             <Image
               source={profileImage}
@@ -605,6 +639,11 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
         )}
+
+        <NotificationPopup 
+          visible={showNotifications} 
+          onClose={() => setShowNotifications(false)} 
+        />
       </View>
     </ScrollView>
   );
@@ -651,8 +690,9 @@ const styles = StyleSheet.create({
     borderColor: 'white',
   },
   
-  notificationIcon: {
-    marginRight: 10,
+  notificationButton: {
+    position: 'relative',
+    padding: 5,
   },
 
   profileHeader: {

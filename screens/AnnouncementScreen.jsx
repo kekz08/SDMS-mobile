@@ -10,12 +10,14 @@ import {
   Alert,
   ActivityIndicator,
   ScrollView,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const API_URL = 'http://192.168.254.101:3000/api';
+import NotificationPopup from '../components/NotificationPopup';
+import NotificationBadge from '../components/NotificationBadge';
+import { API_URL } from '../app/config';
 
 export default function AnnouncementScreen({ navigation }) {
   const [announcements, setAnnouncements] = useState([]);
@@ -23,6 +25,7 @@ export default function AnnouncementScreen({ navigation }) {
   const [modalVisible, setModalVisible] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState(null);
+  const [showNotifications, setShowNotifications] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
     content: '',
@@ -38,26 +41,55 @@ export default function AnnouncementScreen({ navigation }) {
     try {
       setLoading(true);
       const token = await AsyncStorage.getItem('userToken');
+      const userData = await AsyncStorage.getItem('userData');
+
+      if (!token || !userData) {
+        console.log('Missing auth data:', { token: !!token, userData: !!userData });
+        return;
+      }
+
+      const user = JSON.parse(userData);
+      console.log('Fetching announcements for user:', user.role);
+
       const response = await fetch(`${API_URL}/admin/announcements`, {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
       });
 
+      const data = await response.json();
+      console.log('Fetched announcements:', data);
+
       if (!response.ok) {
-        throw new Error('Failed to fetch announcements');
+        throw new Error(data.message || 'Failed to fetch announcements');
       }
 
-      const data = await response.json();
-      setAnnouncements(data);
+      setAnnouncements(Array.isArray(data) ? data : []);
     } catch (error) {
-      Alert.alert('Error', error.message);
+      console.error('Error in fetchAnnouncements:', error);
+      Alert.alert('Error', 'Failed to load announcements');
     } finally {
       setLoading(false);
     }
   };
 
+  const resetForm = () => {
+    setFormData({
+      title: '',
+      content: '',
+      priority: 'normal',
+      status: 'active'
+    });
+  };
+
+  const handleCreatePress = () => {
+    resetForm();
+    setModalVisible(true);
+  };
+
   const handleAddAnnouncement = () => {
+    console.log('Add announcement button pressed');
     setEditMode(false);
     setFormData({
       title: '',
@@ -93,32 +125,84 @@ export default function AnnouncementScreen({ navigation }) {
   };
 
   const handleSubmit = async () => {
-    if (!validateForm()) return;
+    console.log('Submit button pressed', formData);
 
     try {
+      // Form validation
+      if (!formData.title.trim()) {
+        Alert.alert('Error', 'Please enter a title');
+        return;
+      }
+      if (!formData.content.trim()) {
+        Alert.alert('Error', 'Please enter content');
+        return;
+      }
+
+      setLoading(true);
       const token = await AsyncStorage.getItem('userToken');
-      const url = editMode 
-        ? `${API_URL}/admin/announcements/${selectedAnnouncement.id}`
-        : `${API_URL}/admin/announcements`;
-      
-      const response = await fetch(url, {
-        method: editMode ? 'PUT' : 'POST',
+      const userData = await AsyncStorage.getItem('userData');
+
+      if (!token || !userData) {
+        Alert.alert('Error', 'Please log in to create announcements');
+        return;
+      }
+
+      const user = JSON.parse(userData);
+      console.log('Current user:', user);
+
+      const requestData = {
+        title: formData.title.trim(),
+        content: formData.content.trim(),
+        priority: formData.priority,
+        status: formData.status,
+        createdBy: user.id
+      };
+
+      console.log('Sending announcement data:', requestData);
+      console.log('API URL:', `${API_URL}/admin/announcements`);
+
+      const response = await fetch(`${API_URL}/admin/announcements`, {
+        method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(requestData)
       });
 
+      console.log('Response received:', response.status);
+      const responseData = await response.json();
+      console.log('Response data:', responseData);
+
       if (!response.ok) {
-        throw new Error(editMode ? 'Failed to update announcement' : 'Failed to create announcement');
+        throw new Error(responseData.message || 'Failed to create announcement');
       }
 
-      await fetchAnnouncements();
+      // Reset form and update UI
+      setFormData({
+        title: '',
+        content: '',
+        priority: 'normal',
+        status: 'active'
+      });
       setModalVisible(false);
-      Alert.alert('Success', editMode ? 'Announcement updated successfully' : 'Announcement created successfully');
+      
+      // Fetch updated announcements
+      await fetchAnnouncements();
+      
+      Alert.alert(
+        'Success',
+        'Announcement created successfully',
+        [{ text: 'OK' }]
+      );
     } catch (error) {
-      Alert.alert('Error', error.message);
+      console.error('Error in handleSubmit:', error);
+      Alert.alert(
+        'Error',
+        error.message || 'Failed to create announcement. Please try again.'
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -189,6 +273,33 @@ export default function AnnouncementScreen({ navigation }) {
     </View>
   );
 
+  const renderPriorityButtons = () => (
+    <View style={styles.priorityButtons}>
+      {['high', 'normal', 'low'].map((priority) => (
+        <TouchableOpacity
+          key={priority}
+          style={[
+            styles.priorityButton,
+            formData.priority === priority && styles.selectedPriorityButton
+          ]}
+          onPress={() => setFormData({ ...formData, priority })}
+        >
+          <Text style={[
+            styles.priorityButtonText,
+            formData.priority === priority && styles.selectedPriorityButtonText
+          ]}>
+            {priority.toUpperCase()}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+
+  // Add this useEffect to log when announcements change
+  useEffect(() => {
+    console.log('Announcements state updated:', announcements);
+  }, [announcements]);
+
   return (
     <View style={styles.container}>
       <LinearGradient colors={['#005500', '#007000', '#009000']} style={styles.gradient} />
@@ -198,27 +309,62 @@ export default function AnnouncementScreen({ navigation }) {
           <Ionicons name="menu" size={32} color="white" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Announcements</Text>
-        <TouchableOpacity onPress={handleAddAnnouncement}>
-          <Ionicons name="add-circle-outline" size={32} color="white" />
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <TouchableOpacity 
+            onPress={() => setShowNotifications(!showNotifications)}
+            style={styles.notificationButton}
+          >
+            <Ionicons 
+              name={showNotifications ? "notifications" : "notifications-outline"} 
+              size={26} 
+              color="white" 
+            />
+            <NotificationBadge />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            onPress={handleAddAnnouncement}
+            style={styles.addButton}
+          >
+            <Ionicons name="add-circle-outline" size={32} color="white" />
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {loading ? (
-        <ActivityIndicator size="large" color="white" style={styles.loader} />
-      ) : (
-        <FlatList
-          data={announcements}
-          renderItem={renderAnnouncementCard}
-          keyExtractor={item => item.id.toString()}
-          contentContainerStyle={styles.listContainer}
-        />
-      )}
+      <NotificationPopup 
+        visible={showNotifications} 
+        onClose={() => setShowNotifications(false)} 
+      />
+
+      <View style={styles.content}>
+        {loading ? (
+          <View style={styles.loaderContainer}>
+            <ActivityIndicator size="large" color="#007AFF" />
+            <Text style={styles.loaderText}>Loading announcements...</Text>
+          </View>
+        ) : announcements.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>No announcements available</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={announcements}
+            renderItem={renderAnnouncementCard}
+            keyExtractor={item => item.id.toString()}
+            contentContainerStyle={styles.listContainer}
+            refreshing={loading}
+            onRefresh={fetchAnnouncements}
+          />
+        )}
+      </View>
 
       <Modal
         visible={modalVisible}
         transparent={true}
         animationType="slide"
-        onRequestClose={() => setModalVisible(false)}
+        onRequestClose={() => {
+          console.log('Modal closing');
+          setModalVisible(false);
+        }}
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
@@ -246,32 +392,7 @@ export default function AnnouncementScreen({ navigation }) {
               />
 
               <Text style={styles.inputLabel}>Priority</Text>
-              <View style={styles.priorityButtons}>
-                {['high', 'normal', 'low'].map((priority) => (
-                  <TouchableOpacity
-                    key={priority}
-                    style={[
-                      styles.priorityButton,
-                      formData.priority === priority && styles.activePriorityButton,
-                      { 
-                        backgroundColor: formData.priority === priority 
-                          ? priority === 'high' 
-                            ? '#F44336' 
-                            : priority === 'normal'
-                              ? '#4CAF50'
-                              : '#FFA000'
-                          : '#f0f0f0'
-                      }
-                    ]}
-                    onPress={() => setFormData({...formData, priority})}
-                  >
-                    <Text style={[
-                      styles.priorityButtonText,
-                      formData.priority === priority && styles.activePriorityButtonText
-                    ]}>{priority.toUpperCase()}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              {renderPriorityButtons()}
 
               <Text style={styles.inputLabel}>Status</Text>
               <View style={styles.statusButtons}>
@@ -310,12 +431,21 @@ export default function AnnouncementScreen({ navigation }) {
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalButton, styles.submitButton]}
+                style={[
+                  styles.modalButton, 
+                  styles.submitButton,
+                  loading && styles.disabledButton
+                ]}
                 onPress={handleSubmit}
+                disabled={loading}
               >
-                <Text style={styles.submitButtonText}>
-                  {editMode ? 'Update' : 'Create'}
-                </Text>
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.submitButtonText}>
+                    {editMode ? 'Update' : 'Create'}
+                  </Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -346,6 +476,15 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: 'white',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 15,
+  },
+  notificationButton: {
+    position: 'relative',
+    padding: 5,
   },
   listContainer: {
     padding: 15,
@@ -451,14 +590,14 @@ const styles = StyleSheet.create({
     marginHorizontal: 5,
     alignItems: 'center',
   },
-  activePriorityButton: {
+  selectedPriorityButton: {
     backgroundColor: '#4CAF50',
   },
   priorityButtonText: {
     fontWeight: 'bold',
     color: '#666',
   },
-  activePriorityButtonText: {
+  selectedPriorityButtonText: {
     color: 'white',
   },
   statusButtons: {
@@ -509,9 +648,32 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
   },
-  loader: {
+  loaderContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  loaderText: {
+    marginTop: 10,
+    color: '#666',
+    fontSize: 16,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyText: {
+    color: '#666',
+    fontSize: 16,
+  },
+  content: {
+    flex: 1,
+  },
+  addButton: {
+    padding: 5,
+  },
+  disabledButton: {
+    opacity: 0.7,
   },
 });

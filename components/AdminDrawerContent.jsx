@@ -14,6 +14,7 @@ import {
 } from '@react-navigation/drawer';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const BASE_URL = 'http://192.168.254.101:3000';
 
@@ -72,99 +73,131 @@ export default function AdminDrawerContent(props) {
     );
   };
 
+  const CustomDrawerItem = ({ label, icon, onPress, isLogout }) => (
+    <DrawerItem
+      label={() => (
+        <Text style={[
+          styles.drawerItemLabel,
+          isLogout && styles.logoutLabel
+        ]}>
+          {label}
+        </Text>
+      )}
+      icon={({ size }) => (
+        <Ionicons 
+          name={icon} 
+          size={size} 
+          color={isLogout ? '#F44336' : '#FFFFFF'} 
+        />
+      )}
+      onPress={onPress}
+      style={[
+        styles.drawerItem,
+        isLogout && styles.logoutItem
+      ]}
+    />
+  );
+
   return (
-    <DrawerContentScrollView {...props}>
-      <View style={styles.drawerHeader}>
-        <Image
-          source={profileImage || require('../assets/profile-placeholder.png')}
-          style={styles.profileImage}
-        />
-        <View style={styles.userInfo}>
-          <Text style={styles.userName}>
-            {userData ? `${userData.firstName} ${userData.lastName}` : 'Admin User'}
-          </Text>
-          <Text style={styles.userRole}>Administrator</Text>
+    <View style={styles.container}>
+      <LinearGradient
+        colors={['#005500', '#007000', '#009000']}
+        style={styles.gradient}
+      />
+      
+      <DrawerContentScrollView {...props} style={styles.scrollView}>
+        <View style={styles.drawerHeader}>
+          <Image
+            source={profileImage || require('../assets/profile-placeholder.png')}
+            style={styles.profileImage}
+          />
+          <View style={styles.userInfo}>
+            <Text style={styles.userName}>
+              {userData ? `${userData.firstName} ${userData.lastName}` : 'Admin User'}
+            </Text>
+            <Text style={styles.userRole}>Administrator</Text>
+          </View>
         </View>
-      </View>
 
-      <View style={styles.drawerContent}>
-        {/* Admin-specific navigation items */}
-        <DrawerItem
-          label="Dashboard"
-          icon={({ color, size }) => (
-            <Ionicons name="home-outline" size={size} color={color} />
-          )}
-          onPress={() => props.navigation.navigate('AdminDashboard')}
-        />
+        <View style={styles.drawerContent}>
+          <CustomDrawerItem
+            label="Dashboard"
+            icon="home-outline"
+            onPress={() => props.navigation.navigate('AdminDashboard')}
+          />
 
-        <DrawerItem
-          label="User Management"
-          icon={({ color, size }) => (
-            <Ionicons name="people-outline" size={size} color={color} />
-          )}
-          onPress={() => props.navigation.navigate('UserManagement')}
-        />
+          <CustomDrawerItem
+            label="User Management"
+            icon="people-outline"
+            onPress={() => props.navigation.navigate('UserManagement')}
+          />
 
-        <DrawerItem
-          label="Scholarship Management"
-          icon={({ color, size }) => (
-            <Ionicons name="school-outline" size={size} color={color} />
-          )}
-          onPress={() => props.navigation.navigate('ScholarshipManagement')}
-        />
+          <CustomDrawerItem
+            label="Scholarship Management"
+            icon="school-outline"
+            onPress={() => props.navigation.navigate('ScholarshipManagement')}
+          />
 
-        <DrawerItem
-          label="Application Review"
-          icon={({ color, size }) => (
-            <Ionicons name="document-text-outline" size={size} color={color} />
-          )}
-          onPress={() => props.navigation.navigate('ApplicationReview')}
-        />
+          <CustomDrawerItem
+            label="Application Review"
+            icon="document-text-outline"
+            onPress={() => props.navigation.navigate('ApplicationReview')}
+          />
 
-        <DrawerItem
-          label="Announcements"
-          icon={({ color, size }) => (
-            <Ionicons name="megaphone-outline" size={size} color={color} />
-          )}
-          onPress={() => props.navigation.navigate('Announcements')}
-        />
+          <CustomDrawerItem
+            label="Announcements"
+            icon="megaphone-outline"
+            onPress={() => props.navigation.navigate('Announcements')}
+          />
 
-        <DrawerItem
-          label="Reports"
-          icon={({ color, size }) => (
-            <Ionicons name="bar-chart-outline" size={size} color={color} />
-          )}
-          onPress={() => props.navigation.navigate('Reports')}
-        />
+          <CustomDrawerItem
+            label="Concerns"
+            icon="chatbox-ellipses-outline"
+            onPress={() => props.navigation.navigate('AdminConcerns')}
+          />
 
-        <DrawerItem
-          label="Settings"
-          icon={({ color, size }) => (
-            <Ionicons name="settings-outline" size={size} color={color} />
-          )}
-          onPress={() => props.navigation.navigate('Settings')}
-        />
-      </View>
+          <CustomDrawerItem
+            label="Reports"
+            icon="bar-chart-outline"
+            onPress={() => props.navigation.navigate('Reports')}
+          />
 
-      <View style={styles.bottomDrawerSection}>
-        <DrawerItem
-          label="Logout"
-          icon={({ color, size }) => (
-            <Ionicons name="log-out-outline" size={size} color={color} />
-          )}
-          onPress={handleLogout}
-        />
-      </View>
-    </DrawerContentScrollView>
+          <CustomDrawerItem
+            label="Settings"
+            icon="settings-outline"
+            onPress={() => props.navigation.navigate('Settings')}
+          />
+        </View>
+
+        <View style={styles.bottomDrawerSection}>
+          <CustomDrawerItem
+            label="Logout"
+            icon="log-out-outline"
+            onPress={handleLogout}
+            isLogout={true}
+          />
+        </View>
+      </DrawerContentScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#008000',
+  },
+  gradient: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  scrollView: {
+    backgroundColor: 'transparent',
+  },
   drawerHeader: {
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#f4f4f4',
-    backgroundColor: '#008000',
+    borderBottomColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
   },
   profileImage: {
     width: 80,
@@ -178,22 +211,41 @@ const styles = StyleSheet.create({
     marginLeft: 5,
   },
   userName: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: '#fff',
+    color: '#FFFFFF',
   },
   userRole: {
-    fontSize: 14,
-    color: '#fff',
-    opacity: 0.8,
+    fontSize: 16,
+    color: '#FFFFFF',
+    opacity: 0.9,
   },
   drawerContent: {
     flex: 1,
     paddingTop: 10,
   },
+  drawerItem: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    marginHorizontal: 10,
+    marginVertical: 4,
+    borderRadius: 10,
+  },
+  drawerItemLabel: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
   bottomDrawerSection: {
     marginTop: 15,
     borderTopWidth: 1,
-    borderTopColor: '#f4f4f4',
+    borderTopColor: 'rgba(255, 255, 255, 0.2)',
+    paddingTop: 15,
   },
+  logoutItem: {
+    backgroundColor: 'rgba(244, 67, 54, 0.1)',
+  },
+  logoutLabel: {
+    color: '#F44336',
+    fontWeight: 'bold',
+  }
 }); 

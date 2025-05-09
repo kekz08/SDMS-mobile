@@ -17,6 +17,8 @@ import AdminDashboardScreen from '../screens/AdminDashboardScreen';
 import EducationalAids from '../screens/EducationalAidsScreen';
 import ApplicationStatus from '../screens/ApplicationStatusScreen';
 import AnnouncementScreen from '../screens/AnnouncementScreen';
+import UserAnnouncementScreen from '../screens/UserAnnouncementScreen';
+import AdminConcernScreen from '../screens/AdminConcernScreen';
 import Concern from '../screens/ConcernScreen';
 import Profile from '../screens/ProfileScreen';
 import Register from '../screens/RegistrationScreen';
@@ -106,6 +108,13 @@ function AdminDrawer({ onLogout }) {
         }}
       />
       <Drawer.Screen 
+        name="AdminConcerns" 
+        component={AdminConcernScreen}
+        options={{
+          title: 'User Concerns'
+        }}
+      />
+      <Drawer.Screen 
         name="Reports" 
         component={ReportsScreen}
         options={{
@@ -137,7 +146,7 @@ function UserDrawer({ onLogout }) {
       <Drawer.Screen name="Dashboard" component={DashboardScreen} />
       <Drawer.Screen name="Educational Aids" component={EducationalAids} />
       <Drawer.Screen name="Application Status" component={ApplicationStatus} />
-      <Drawer.Screen name="Announcements" component={AnnouncementScreen} />
+      <Drawer.Screen name="Announcements" component={UserAnnouncementScreen} />
       <Drawer.Screen name="Concerns" component={Concern} />
       <Drawer.Screen name="Profile" component={Profile} />
     </Drawer.Navigator>

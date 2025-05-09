@@ -54,8 +54,43 @@ export default function ApplicationReviewScreen({ navigation }) {
     }
   };
 
+  const createNotification = async (userId, title, message, type) => {
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      const response = await fetch(`${API_URL}/notifications`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          userId,
+          title,
+          message,
+          type,
+          isRead: false
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create notification');
+      }
+    } catch (error) {
+      console.error('Error creating notification:', error);
+    }
+  };
+
   const handleStatusUpdate = async (status) => {
     try {
+      if (!remarks && status === 'rejected') {
+        Alert.alert(
+          'Remarks Required',
+          'Please provide remarks explaining why the application was rejected.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
       const token = await AsyncStorage.getItem('userToken');
       const response = await fetch(
         `${API_URL}/admin/applications/${selectedApplication.id}/status`,
@@ -80,9 +115,33 @@ export default function ApplicationReviewScreen({ navigation }) {
           : app
       ));
 
+      // Create notification based on status
+      const notificationTitle = status === 'approved' 
+        ? 'Scholarship Application Approved!' 
+        : 'Scholarship Application Update';
+
+      const notificationMessage = status === 'approved'
+        ? `Congratulations! Your application for ${selectedApplication.scholarshipName} has been approved.`
+        : `Your application for ${selectedApplication.scholarshipName} has been ${status}. ${
+            status === 'rejected' ? `Reason: ${remarks}` : ''
+          }`;
+
+      const notificationType = status === 'approved' ? 'success' : 'info';
+
+      await createNotification(
+        selectedApplication.userId,
+        notificationTitle,
+        notificationMessage,
+        notificationType
+      );
+
       setModalVisible(false);
       setRemarks('');
-      Alert.alert('Success', 'Application status updated successfully');
+      Alert.alert(
+        'Success',
+        `Application ${status}. Notification sent to applicant.`,
+        [{ text: 'OK' }]
+      );
     } catch (error) {
       Alert.alert('Error', error.message);
     }
@@ -400,8 +459,14 @@ export default function ApplicationReviewScreen({ navigation }) {
                 <View style={styles.modalSection}>
                   <Text style={styles.sectionTitle}>Review</Text>
                   <TextInput
-                    style={styles.remarksInput}
-                    placeholder="Add remarks or notes about the application..."
+                    style={[
+                      styles.remarksInput,
+                      !remarks && styles.remarksInputRequired
+                    ]}
+                    placeholder={
+                      "Add remarks or notes about the application...\n" +
+                      "(Required for rejection, optional for approval)"
+                    }
                     value={remarks}
                     onChangeText={setRemarks}
                     multiline
@@ -420,8 +485,13 @@ export default function ApplicationReviewScreen({ navigation }) {
                   </TouchableOpacity>
 
                   <TouchableOpacity
-                    style={[styles.actionButton, { backgroundColor: '#F44336' }]}
+                    style={[
+                      styles.actionButton, 
+                      { backgroundColor: '#F44336' },
+                      !remarks && styles.disabledButton
+                    ]}
                     onPress={() => handleStatusUpdate('rejected')}
+                    disabled={!remarks}
                   >
                     <Ionicons name="close-circle-outline" size={20} color="white" />
                     <Text style={styles.actionButtonText}>Reject</Text>
@@ -613,6 +683,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
     backgroundColor: '#f9f9f9',
+  },
+  remarksInputRequired: {
+    borderColor: '#ffcdd2',
+    backgroundColor: '#ffebee',
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
   actionButtons: {
     flexDirection: 'row',

@@ -7,11 +7,12 @@ import * as DocumentPicker from 'expo-document-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NotificationPopup from '../components/NotificationPopup';
+import NotificationBadge from '../components/NotificationBadge';
 import { format } from 'date-fns';
 
 const BASE_URL = 'http://192.168.254.101:3000';
 
-export default function EducationalAidsScreen() {
+export default function EducationalAidsScreen({ route }) {
   const navigation = useNavigation();
   const [activeTab, setActiveTab] = useState('available');
   const [currentStep, setCurrentStep] = useState(0); // Step 0 is scholarship selection
@@ -23,9 +24,12 @@ export default function EducationalAidsScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [availableScholarships, setAvailableScholarships] = useState([]);
+  const [userApplications, setUserApplications] = useState([]);
   const [userData, setUserData] = useState(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [isReapplication, setIsReapplication] = useState(false);
+  const [previousApplicationId, setPreviousApplicationId] = useState(null);
 
   const loadUserData = useCallback(async () => {
     try {
@@ -61,10 +65,32 @@ export default function EducationalAidsScreen() {
       }));
 
       if (parsedUserData.profileImage) {
-        const imageUrl = parsedUserData.profileImage.startsWith('http') 
-          ? parsedUserData.profileImage 
-          : `${BASE_URL}/${parsedUserData.profileImage}`;
-        setProfileImage({ uri: imageUrl });
+        try {
+          // Clean up the URL path by removing any absolute path references
+          let imageUrl = parsedUserData.profileImage;
+          if (imageUrl.includes('uploads/')) {
+            // Extract just the uploads part of the path
+            imageUrl = imageUrl.substring(imageUrl.indexOf('uploads/'));
+          }
+          
+          // Construct the full URL
+          const fullImageUrl = `${BASE_URL}/${imageUrl}`;
+          console.log('Educational Aids - Setting profile image URL:', fullImageUrl);
+          
+          // Test if image is accessible
+          const imageResponse = await fetch(fullImageUrl);
+          if (imageResponse.ok) {
+            setProfileImage({ uri: fullImageUrl });
+          } else {
+            throw new Error(`Image not accessible: ${imageResponse.status}`);
+          }
+        } catch (error) {
+          console.error('Error loading profile image:', error);
+          setProfileImage(require('../assets/profile-placeholder.png'));
+        }
+      } else {
+        console.log('No profile image URL found, using default');
+        setProfileImage(require('../assets/profile-placeholder.png'));
       }
     } catch (error) {
       console.error('Error loading user data:', error);
@@ -76,18 +102,38 @@ export default function EducationalAidsScreen() {
     }
   }, [navigation]);
 
-  useEffect(() => {
-    const initializeScreen = async () => {
-      await loadUserData();
-      await fetchScholarships();
-    };
-    initializeScreen();
-  }, [loadUserData]);
+  const fetchUserApplications = async () => {
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token) {
+        console.log('No token found for fetching applications');
+        return;
+      }
+
+      const response = await fetch(`${BASE_URL}/api/user/applications`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch user applications');
+      }
+
+      const data = await response.json();
+      setUserApplications(data.applications || []);
+    } catch (error) {
+      console.error('Error fetching user applications:', error);
+    }
+  };
 
   const fetchScholarships = async () => {
     try {
       setLoading(true);
       setError(null);
+
+      // Fetch scholarships
       const response = await fetch(`${BASE_URL}/api/scholarships`);
       
       if (!response.ok) {
@@ -95,7 +141,23 @@ export default function EducationalAidsScreen() {
       }
 
       const data = await response.json();
-      setAvailableScholarships(data);
+      
+      // Fetch user applications to check which scholarships user has already applied for
+      await fetchUserApplications();
+      
+      // Mark scholarships that have already been applied for or approved
+      const scholarshipsWithStatus = data.map(scholarship => {
+        const existingApplication = userApplications.find(app => app.scholarshipId === scholarship.id);
+        return {
+          ...scholarship,
+          hasApplied: !!existingApplication,
+          applicationStatus: existingApplication?.status || null,
+          canReapply: existingApplication?.status === 'rejected', // Only allow reapplication if rejected
+          isDisabled: existingApplication && existingApplication.status !== 'rejected' // Disable if already applied and not rejected
+        };
+      });
+
+      setAvailableScholarships(scholarshipsWithStatus);
       setError(null);
     } catch (error) {
       console.error('Error fetching scholarships:', error);
@@ -104,6 +166,46 @@ export default function EducationalAidsScreen() {
       setLoading(false);
     }
   };
+
+  const checkReapplicationData = async () => {
+    try {
+      const reapplyDataString = await AsyncStorage.getItem('reapplyData');
+      if (reapplyDataString) {
+        const reapplyData = JSON.parse(reapplyDataString);
+        setIsReapplication(true);
+        setPreviousApplicationId(reapplyData.previousApplication.previousApplicationId);
+        
+        // Pre-select the scholarship
+        const scholarship = availableScholarships.find(s => s.id === reapplyData.scholarshipId);
+        if (scholarship) {
+          setSelectedScholarship(scholarship);
+          setFormData(prev => ({
+            ...prev,
+            scholarshipId: scholarship.id,
+            previousApplicationId: reapplyData.previousApplication.previousApplicationId,
+            isReapplication: true
+          }));
+        }
+
+        // Switch to apply tab
+        setActiveTab('apply');
+
+        // Clean up the stored data
+        await AsyncStorage.removeItem('reapplyData');
+      }
+    } catch (error) {
+      console.error('Error checking reapplication data:', error);
+    }
+  };
+
+  useEffect(() => {
+    const initializeScreen = async () => {
+      await loadUserData();
+      await fetchScholarships();
+      await checkReapplicationData();
+    };
+    initializeScreen();
+  }, [loadUserData]);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -226,6 +328,12 @@ export default function EducationalAidsScreen() {
       formDataToSend.append('status', 'pending');
       formDataToSend.append('remarks', formData.remarks || '');
 
+      // Add reapplication data if this is a reapplication
+      if (isReapplication) {
+        formDataToSend.append('isReapplication', 'true');
+        formDataToSend.append('previousApplicationId', previousApplicationId.toString());
+      }
+
       console.log('Submitting application data:', formDataToSend);
 
       const response = await fetch(`${BASE_URL}/api/applications`, {
@@ -251,6 +359,25 @@ export default function EducationalAidsScreen() {
 
       if (!response.ok) {
         throw new Error(responseData.message || 'Failed to submit application');
+      }
+
+      // Send notification to admin
+      const adminNotificationResponse = await fetch(`${BASE_URL}/api/notifications`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          userId: 1, // Admin user ID (assuming admin has ID 1)
+          title: 'New Scholarship Application',
+          message: `A new application has been submitted for ${selectedScholarship.name} by ${userData.firstName} ${userData.lastName}`,
+          type: 'info'
+        })
+      });
+
+      if (!adminNotificationResponse.ok) {
+        console.error('Failed to send admin notification');
       }
 
       Alert.alert(
@@ -292,6 +419,10 @@ export default function EducationalAidsScreen() {
                 remarks: '',
                 submissionDate: new Date()
               });
+
+              // Reset reapplication state after successful submission
+              setIsReapplication(false);
+              setPreviousApplicationId(null);
             }
           }
         ]
@@ -322,30 +453,77 @@ export default function EducationalAidsScreen() {
       case 0:
         return (
           <View style={styles.stepContainer}>
-            <Text style={styles.stepTitle}>Select Scholarship to Apply For</Text>
+            <Text style={styles.stepTitle}>
+              {isReapplication ? 'Update Previous Application' : 'Select Scholarship to Apply For'}
+            </Text>
+            {isReapplication && (
+              <View style={styles.reapplicationNote}>
+                <Ionicons name="information-circle" size={20} color="#FFA000" />
+                <Text style={styles.reapplicationText}>
+                  You are updating a previous application. Please review and update your information based on the feedback received.
+                </Text>
+              </View>
+            )}
             {availableScholarships.map(scholarship => (
-              <TouchableOpacity
-                key={scholarship.id}
+              <View 
+                key={scholarship.id} 
                 style={[
-                  styles.scholarshipOption,
-                  selectedScholarship?.id === scholarship.id && styles.selectedScholarship
+                  styles.scholarshipCard,
+                  scholarship.hasApplied && styles.appliedScholarshipCard,
+                  scholarship.applicationStatus === 'approved' && styles.approvedScholarshipCard
                 ]}
-                onPress={() => {
-                  setSelectedScholarship(scholarship);
-                  setFormData(prev => ({
-                    ...prev,
-                    scholarshipId: scholarship.id
-                  }));
-                }}
               >
-                <Text style={styles.scholarshipOptionName}>{scholarship.name}</Text>
-                <Text style={styles.scholarshipOptionDetails}>
+                {scholarship.hasApplied && (
+                  <View style={[
+                    styles.appliedBadge,
+                    { backgroundColor: scholarship.applicationStatus === 'approved' ? '#4CAF50' : 
+                                    scholarship.applicationStatus === 'rejected' ? '#F44336' : '#FFA000' }
+                  ]}>
+                    <Text style={styles.appliedBadgeText}>
+                      {scholarship.applicationStatus === 'approved' ? 'Approved' :
+                       scholarship.applicationStatus === 'rejected' ? 'Rejected' : 'Pending'}
+                    </Text>
+                  </View>
+                )}
+                <Text style={styles.scholarshipName}>{scholarship.name}</Text>
+                <Text style={styles.scholarshipAmount}>Amount: ₱{scholarship.amount?.toLocaleString()}</Text>
+                <Text style={styles.scholarshipDeadline}>
                   Deadline: {scholarship.deadline ? format(new Date(scholarship.deadline), 'MMM dd, yyyy') : 'Not specified'}
                 </Text>
-                <Text style={styles.scholarshipOptionDetails}>
-                  Requirements: {scholarship.requirements || 'None specified'}
-                </Text>
-              </TouchableOpacity>
+                <Text style={styles.scholarshipRequirements}>Requirements: {scholarship.requirements}</Text>
+                {scholarship.description && (
+                  <Text style={styles.scholarshipDescription}>{scholarship.description}</Text>
+                )}
+                <TouchableOpacity 
+                  style={[
+                    styles.applyButton,
+                    (scholarship.hasApplied && !scholarship.canReapply) && styles.alreadyAppliedButton,
+                    scholarship.applicationStatus === 'approved' && styles.approvedButton,
+                    (scholarship.status !== 'active' || scholarship.isDisabled) && styles.disabledApplyButton
+                  ]}
+                  onPress={() => {
+                    if ((scholarship.status === 'active' && !scholarship.hasApplied) || 
+                        (scholarship.hasApplied && scholarship.canReapply)) {
+                      setActiveTab('apply');
+                      setSelectedScholarship(scholarship);
+                      setFormData(prev => ({
+                        ...prev,
+                        scholarshipId: scholarship.id
+                      }));
+                    }
+                  }}
+                  disabled={scholarship.status !== 'active' || 
+                          (scholarship.hasApplied && !scholarship.canReapply) ||
+                          scholarship.applicationStatus === 'approved' ||
+                          scholarship.isDisabled}
+                >
+                  <Text style={styles.applyButtonText}>
+                    {scholarship.applicationStatus === 'approved' ? 'Already Approved' :
+                     scholarship.applicationStatus === 'rejected' ? 'Reapply' :
+                     scholarship.hasApplied ? 'Application Pending' : 'Apply Now'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             ))}
             <View style={styles.buttonGroup}>
               <TouchableOpacity 
@@ -584,13 +762,9 @@ export default function EducationalAidsScreen() {
                 <Text style={styles.buttonText}>Back</Text>
               </TouchableOpacity>
               <TouchableOpacity 
-                style={[
-                  styles.button, 
-                  styles.nextButton,
-                  (!formData.documents.reportCard || 
-                   !formData.documents.brgyClearance || 
-                   !formData.documents.incomeCertificate) && styles.disabledButton
-                ]}
+                style={[styles.button, styles.nextButton, (!formData.documents.reportCard || 
+                 !formData.documents.brgyClearance || 
+                 !formData.documents.incomeCertificate) && styles.disabledButton]}
                 onPress={() => {
                   if (formData.documents.reportCard && 
                       formData.documents.brgyClearance && 
@@ -702,9 +876,7 @@ export default function EducationalAidsScreen() {
                 size={26} 
                 color="white" 
               />
-              <View style={styles.notificationBadge}>
-                <Text style={styles.notificationBadgeText}>2</Text>
-              </View>
+              <NotificationBadge />
             </TouchableOpacity>
             <Image
               source={profileImage}
@@ -762,10 +934,23 @@ export default function EducationalAidsScreen() {
               </View>
             ) : (
               availableScholarships.map(scholarship => (
-                <View key={scholarship.id} style={styles.scholarshipCard}>
+                <View 
+                  key={scholarship.id} 
+                  style={[
+                    styles.scholarshipCard,
+                    scholarship.hasApplied && styles.appliedScholarshipCard
+                  ]}
+                >
+                  {scholarship.hasApplied && (
+                    <View style={styles.appliedBadge}>
+                      <Text style={styles.appliedBadgeText}>Applied</Text>
+                    </View>
+                  )}
                   <Text style={styles.scholarshipName}>{scholarship.name}</Text>
                   <Text style={styles.scholarshipAmount}>Amount: ₱{scholarship.amount?.toLocaleString()}</Text>
-                  <Text style={styles.scholarshipDeadline}>Deadline: {scholarship.deadline}</Text>
+                  <Text style={styles.scholarshipDeadline}>
+                    Deadline: {scholarship.deadline ? format(new Date(scholarship.deadline), 'MMM dd, yyyy') : 'Not specified'}
+                  </Text>
                   <Text style={styles.scholarshipRequirements}>Requirements: {scholarship.requirements}</Text>
                   {scholarship.description && (
                     <Text style={styles.scholarshipDescription}>{scholarship.description}</Text>
@@ -773,10 +958,13 @@ export default function EducationalAidsScreen() {
                   <TouchableOpacity 
                     style={[
                       styles.applyButton,
-                      scholarship.status !== 'active' && styles.disabledApplyButton
+                      (scholarship.hasApplied && !scholarship.canReapply) && styles.alreadyAppliedButton,
+                      scholarship.applicationStatus === 'approved' && styles.approvedButton,
+                      (scholarship.status !== 'active' || scholarship.isDisabled) && styles.disabledApplyButton
                     ]}
                     onPress={() => {
-                      if (scholarship.status === 'active') {
+                      if ((scholarship.status === 'active' && !scholarship.hasApplied) || 
+                          (scholarship.hasApplied && scholarship.canReapply)) {
                         setActiveTab('apply');
                         setSelectedScholarship(scholarship);
                         setFormData(prev => ({
@@ -785,10 +973,15 @@ export default function EducationalAidsScreen() {
                         }));
                       }
                     }}
-                    disabled={scholarship.status !== 'active'}
+                    disabled={scholarship.status !== 'active' || 
+                            (scholarship.hasApplied && !scholarship.canReapply) ||
+                            scholarship.applicationStatus === 'approved' ||
+                            scholarship.isDisabled}
                   >
                     <Text style={styles.applyButtonText}>
-                      {scholarship.status === 'active' ? 'Apply Now' : 'Not Available'}
+                      {scholarship.applicationStatus === 'approved' ? 'Already Approved' :
+                       scholarship.applicationStatus === 'rejected' ? 'Reapply' :
+                       scholarship.hasApplied ? 'Application Pending' : 'Apply Now'}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -900,6 +1093,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 15,
     marginBottom: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   scholarshipName: {
     fontSize: 18,
@@ -929,8 +1124,33 @@ const styles = StyleSheet.create({
     padding: 10,
     alignItems: 'center',
   },
+  disabledApplyButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+  },
   applyButtonText: {
     color: 'white',
+    fontWeight: 'bold',
+  },
+  alreadyAppliedButton: {
+    backgroundColor: '#4CAF50',
+    opacity: 0.7,
+  },
+  appliedScholarshipCard: {
+    borderColor: '#4CAF50',
+    borderWidth: 1,
+  },
+  appliedBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  appliedBadgeText: {
+    color: 'white',
+    fontSize: 12,
     fontWeight: 'bold',
   },
   applicationContainer: {
@@ -1082,8 +1302,11 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     fontStyle: 'italic',
   },
-  disabledApplyButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+  selectedScholarshipText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 10,
   },
   loadingContainer: {
     flex: 1,
@@ -1102,5 +1325,30 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  reapplicationNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 160, 0, 0.1)',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 15,
+    borderLeftWidth: 3,
+    borderLeftColor: '#FFA000',
+  },
+  reapplicationText: {
+    color: 'white',
+    marginLeft: 10,
+    flex: 1,
+    fontSize: 13,
+  },
+  approvedScholarshipCard: {
+    borderColor: '#4CAF50',
+    borderWidth: 2,
+    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+  },
+  approvedButton: {
+    backgroundColor: '#4CAF50',
+    opacity: 0.7,
   },
 });

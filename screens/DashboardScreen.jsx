@@ -1,11 +1,22 @@
 import { useState, useEffect } from 'react';
 import { useNavigation } from '@react-navigation/native';
-import { View, Text, Image, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions, Alert } from 'react-native';
+import { 
+  View, 
+  Text, 
+  Image, 
+  TouchableOpacity, 
+  StyleSheet, 
+  ScrollView, 
+  useWindowDimensions, 
+  Alert,
+  ActivityIndicator 
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BarChart, PieChart } from 'react-native-chart-kit';
+import { PieChart } from 'react-native-chart-kit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NotificationPopup from '../components/NotificationPopup';
+import NotificationBadge from '../components/NotificationBadge';
 
 const API_URL = 'http://192.168.254.101:3000/api';
 const BASE_URL = 'http://192.168.254.101:3000';
@@ -13,10 +24,15 @@ const BASE_URL = 'http://192.168.254.101:3000';
 export default function DashboardScreen() {
   const navigation = useNavigation();
   const { width } = useWindowDimensions();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [dashboardData, setDashboardData] = useState({
-    totalApplicants: 0,
-    approvedApplications: 0,
-    pendingApplications: 0
+    statusCounts: {
+      approved: 0,
+      pending: 0,
+      rejected: 0
+    },
+    applications: []
   });
   const [userData, setUserData] = useState(null);
   const [profileImage, setProfileImage] = useState(null);
@@ -24,7 +40,7 @@ export default function DashboardScreen() {
 
   useEffect(() => {
     loadUserData();
-    fetchDashboardData();
+    fetchUserApplications();
   }, []);
 
   const loadUserData = async () => {
@@ -34,22 +50,18 @@ export default function DashboardScreen() {
         const parsedUserData = JSON.parse(userDataString);
         setUserData(parsedUserData);
         
-        // Handle profile image
         if (parsedUserData.profileImage) {
           try {
-            // Construct the full URL if it's a relative path
             const imageUrl = parsedUserData.profileImage.startsWith('http') 
               ? parsedUserData.profileImage 
               : `${BASE_URL}/${parsedUserData.profileImage}`;
             
             console.log('Dashboard - Setting profile image URL:', imageUrl);
             
-            // Test if the image URL is valid
             const response = await fetch(imageUrl);
             if (response.ok) {
               setProfileImage({ uri: imageUrl });
             } else {
-              console.warn('Profile image not accessible, using default');
               setProfileImage(require('../assets/profile-placeholder.png'));
             }
           } catch (error) {
@@ -57,7 +69,6 @@ export default function DashboardScreen() {
             setProfileImage(require('../assets/profile-placeholder.png'));
           }
         } else {
-          console.log('No profile image set, using default');
           setProfileImage(require('../assets/profile-placeholder.png'));
         }
       }
@@ -67,92 +78,88 @@ export default function DashboardScreen() {
     }
   };
 
-  const fetchDashboardData = async () => {
+  const fetchUserApplications = async () => {
     try {
+      setLoading(true);
+      setError(null);
+
       const token = await AsyncStorage.getItem('userToken');
       if (!token) {
         navigation.navigate('Login');
         return;
       }
 
-      const response = await fetch(`${API_URL}/dashboard`, {
+      const response = await fetch(`${API_URL}/user/applications`, {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
         }
       });
 
       if (!response.ok) {
         if (response.status === 401) {
-          // Token expired or invalid
           await AsyncStorage.removeItem('userToken');
           await AsyncStorage.removeItem('userData');
           navigation.navigate('Login');
           return;
         }
-        throw new Error('Failed to fetch dashboard data');
+        throw new Error('Failed to fetch application data');
       }
 
       const data = await response.json();
       setDashboardData(data);
     } catch (error) {
-      Alert.alert('Error', error.message || 'Failed to load dashboard data');
+      console.error('Error fetching applications:', error);
+      setError(error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // College-wise applicants data
-  const collegeData = {
-    labels: ['CEIT', 'COT', 'CAS', 'CTE'],
-    datasets: [{
-      data: [120, 85, 65, 110]
-    }]
-  };
-
-  // Application status data
-  const statusData = [
-    { 
-      name: 'Approved', 
-      population: dashboardData.approvedApplications, 
-      color: '#4CAF50', 
-      legendFontColor: 'white' 
-    },
-    { 
-      name: 'Pending', 
-      population: dashboardData.pendingApplications, 
-      color: '#FFC107', 
-      legendFontColor: 'white' 
-    },
-    { 
-      name: 'Rejected', 
-      population: dashboardData.totalApplicants - (dashboardData.approvedApplications + dashboardData.pendingApplications), 
-      color: '#F44336', 
-      legendFontColor: 'white' 
-    }
-  ];
-
-  // Monthly trend data
-  const monthlyData = {
-    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
-    datasets: [{
-      data: [45, 78, 92, 110, 135, 150]
-    }]
-  };
-
-  // Chart configuration
-  const chartConfig = {
-    backgroundGradientFrom: '#005500',
-    backgroundGradientTo: '#009000',
-    decimalPlaces: 0,
-    color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-    labelColor: () => '#fff',
-    style: { borderRadius: 12 },
-    barPercentage: 0.6,
-    propsForBackgroundLines: {
-      strokeWidth: 0
-    },
-    propsForLabels: {
-      fontSize: 10
+  const getStatusColor = (status) => {
+    switch (status.toLowerCase()) {
+      case 'approved':
+        return '#4CAF50';
+      case 'rejected':
+        return '#F44336';
+      case 'pending':
+        return '#FFA000';
+      default:
+        return '#757575';
     }
   };
+
+  const ApplicationCard = ({ application }) => (
+    <View style={styles.applicationCard}>
+      <View style={styles.applicationHeader}>
+        <Text style={styles.scholarshipName}>{application.scholarshipName}</Text>
+        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(application.status) }]}>
+          <Text style={styles.statusText}>{application.status}</Text>
+        </View>
+      </View>
+      <Text style={styles.applicationDate}>
+        Applied on: {new Date(application.createdAt).toLocaleDateString()}
+      </Text>
+      {application.remarks && (
+        <Text style={styles.remarks}>Remarks: {application.remarks}</Text>
+      )}
+      <Text style={styles.amount}>
+        Amount: ₱{application.scholarshipAmount?.toLocaleString()}
+      </Text>
+    </View>
+  );
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <LinearGradient colors={['#005500', '#007000', '#009000']} style={styles.gradient} />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="white" />
+          <Text style={styles.loadingText}>Loading your dashboard...</Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
@@ -179,17 +186,12 @@ export default function DashboardScreen() {
                 size={26} 
                 color="white" 
               />
-              <View style={styles.notificationBadge}>
-                <Text style={styles.notificationBadgeText}>2</Text>
-              </View>
+              <NotificationBadge />
             </TouchableOpacity>
             <Image
               source={profileImage || require('../assets/profile-placeholder.png')}
               style={styles.profileImage}
-              onError={() => {
-                console.log('Error loading profile image, falling back to default');
-                setProfileImage(require('../assets/profile-placeholder.png'));
-              }}
+              onError={() => setProfileImage(require('../assets/profile-placeholder.png'))}
             />
           </View>
         </View>
@@ -199,75 +201,87 @@ export default function DashboardScreen() {
           onClose={() => setShowNotifications(false)} 
         />
 
-        <Text style={styles.heading}>Scholarship Dashboard</Text>
+        <Text style={styles.heading}>My Scholarship Dashboard</Text>
 
         {/* Summary Cards */}
         <View style={styles.summaryContainer}>
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryNumber}>380</Text>
-            <Text style={styles.summaryLabel}>Total Applicants</Text>
-          </View>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryNumber}>215</Text>
+            <Text style={styles.summaryNumber}>{dashboardData.statusCounts.approved}</Text>
             <Text style={styles.summaryLabel}>Approved</Text>
           </View>
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryNumber}>120</Text>
+            <Text style={styles.summaryNumber}>{dashboardData.statusCounts.pending}</Text>
             <Text style={styles.summaryLabel}>Pending</Text>
           </View>
-        </View>
-
-        {/* College-wise Applicants Chart */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Applicants by College</Text>
-          <View style={styles.chartContainer}>
-            <BarChart
-              data={collegeData}
-              width={width - 40}
-              height={220}
-              yAxisLabel=""
-              chartConfig={chartConfig}
-              style={{
-                borderRadius: 12,
-              }}
-              verticalLabelRotation={-15}
-            />
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryNumber}>{dashboardData.statusCounts.rejected}</Text>
+            <Text style={styles.summaryLabel}>Rejected</Text>
           </View>
         </View>
 
-        {/* Application Status Pie Chart */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Application Status</Text>
-          <View style={styles.chartContainer}>
-            <PieChart
-              data={statusData}
-              width={width - 40}
-              height={200}
-              chartConfig={chartConfig}
-              accessor="population"
-              backgroundColor="transparent"
-              paddingLeft="15"
-              absolute
-            />
+        {/* Application Status Chart */}
+        {(dashboardData.statusCounts.approved > 0 || 
+          dashboardData.statusCounts.pending > 0 || 
+          dashboardData.statusCounts.rejected > 0) && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Application Status Overview</Text>
+            <View style={styles.chartContainer}>
+              <PieChart
+                data={[
+                  { 
+                    name: 'Approved',
+                    population: dashboardData.statusCounts.approved,
+                    color: '#4CAF50',
+                    legendFontColor: 'white'
+                  },
+                  {
+                    name: 'Pending',
+                    population: dashboardData.statusCounts.pending,
+                    color: '#FFA000',
+                    legendFontColor: 'white'
+                  },
+                  {
+                    name: 'Rejected',
+                    population: dashboardData.statusCounts.rejected,
+                    color: '#F44336',
+                    legendFontColor: 'white'
+                  }
+                ]}
+                width={width - 40}
+                height={200}
+                chartConfig={{
+                  color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+                }}
+                accessor="population"
+                backgroundColor="transparent"
+                paddingLeft="15"
+                absolute
+              />
+            </View>
           </View>
-        </View>
+        )}
 
-        {/* Monthly Trend Chart */}
+        {/* Recent Applications */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Monthly Application Trend</Text>
-          <View style={styles.chartContainer}>
-            <BarChart
-              data={monthlyData}
-              width={width - 40}
-              height={220}
-              yAxisLabel=""
-              chartConfig={chartConfig}
-              style={{
-                borderRadius: 12,
-              }}
-              fromZero
-            />
-          </View>
+          <Text style={styles.sectionTitle}>Recent Applications</Text>
+          {dashboardData.applications.length > 0 ? (
+            <View style={styles.applicationsContainer}>
+              {dashboardData.applications.map((application, index) => (
+                <ApplicationCard key={application.id} application={application} />
+              ))}
+            </View>
+          ) : (
+            <View style={styles.noDataContainer}>
+              <Ionicons name="document-text-outline" size={50} color="rgba(255, 255, 255, 0.5)" />
+              <Text style={styles.noDataText}>No applications yet</Text>
+              <TouchableOpacity 
+                style={styles.applyButton}
+                onPress={() => navigation.navigate('EducationalAids')}
+              >
+                <Text style={styles.applyButtonText}>Apply for Scholarship</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </View>
     </ScrollView>
@@ -275,9 +289,13 @@ export default function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#008000' },
-  gradient: { ...StyleSheet.absoluteFillObject },
-
+  container: { 
+    flex: 1, 
+    backgroundColor: '#008000' 
+  },
+  gradient: { 
+    ...StyleSheet.absoluteFillObject 
+  },
   bgLogo: {
     position: 'absolute',
     width: '140%',
@@ -287,7 +305,6 @@ const styles = StyleSheet.create({
     bottom: '8%',
     right: '-40%',
   },
-
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -300,7 +317,6 @@ const styles = StyleSheet.create({
     width: '100%',
     backgroundColor: 'rgba(0, 0, 0, 0.1)',
   },
-
   heading: {
     fontSize: 22,
     fontWeight: 'bold',
@@ -309,14 +325,12 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 10,
   },
-
   summaryContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     marginBottom: 20,
   },
-
   summaryCard: {
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     borderRadius: 10,
@@ -324,24 +338,20 @@ const styles = StyleSheet.create({
     width: '30%',
     alignItems: 'center',
   },
-
   summaryNumber: {
     fontSize: 22,
     fontWeight: 'bold',
     color: 'white',
     marginBottom: 5,
   },
-
   summaryLabel: {
     fontSize: 12,
     color: 'rgba(255, 255, 255, 0.8)',
     textAlign: 'center',
   },
-
   section: {
     marginBottom: 25,
   },
-
   sectionTitle: {
     fontSize: 16,
     fontWeight: 'bold',
@@ -349,20 +359,17 @@ const styles = StyleSheet.create({
     marginLeft: 20,
     marginBottom: 10,
   },
-
   chartContainer: {
     marginHorizontal: 20,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     borderRadius: 12,
     padding: 10,
   },
-
   profileContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
   },
-  
   profileImage: {
     width: 40,
     height: 40,
@@ -370,25 +377,91 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'white',
   },
-  
   notificationButton: {
     position: 'relative',
     padding: 5,
   },
-  notificationBadge: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    backgroundColor: '#FF0000',
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
+  loadingContainer: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  notificationBadgeText: {
+  loadingText: {
+    color: 'white',
+    marginTop: 10,
+    fontSize: 16,
+  },
+  applicationsContainer: {
+    paddingHorizontal: 20,
+  },
+  applicationCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 10,
+  },
+  applicationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  scholarshipName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    flex: 1,
+  },
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 15,
+    marginLeft: 10,
+  },
+  statusText: {
     color: 'white',
     fontSize: 12,
+    fontWeight: 'bold',
+    textTransform: 'capitalize',
+  },
+  applicationDate: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+  },
+  remarks: {
+    fontSize: 14,
+    color: '#444',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  amount: {
+    fontSize: 14,
+    color: '#4CAF50',
+    fontWeight: 'bold',
+    marginTop: 4,
+  },
+  noDataContainer: {
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    marginHorizontal: 20,
+    borderRadius: 10,
+  },
+  noDataText: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 16,
+    marginVertical: 10,
+  },
+  applyButton: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 5,
+    marginTop: 10,
+  },
+  applyButtonText: {
+    color: 'white',
     fontWeight: 'bold',
   },
 });
