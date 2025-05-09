@@ -8,7 +8,7 @@ const BASE_URL = 'http://192.168.254.101:3000';
 
 export default function UserDrawerContent({ navigation, onLogout }) {
   const [userData, setUserData] = useState(null);
-  const [profileImage, setProfileImage] = useState(require('../assets/haidee.jpg')); // Default image
+  const [profileImage, setProfileImage] = useState(require('../assets/profile-placeholder.png')); // Default image
 
   useEffect(() => {
     loadUserData();
@@ -45,7 +45,7 @@ export default function UserDrawerContent({ navigation, onLogout }) {
       
       // Reset state
       setUserData(null);
-      setProfileImage(require('../assets/haidee.jpg'));
+      setProfileImage(require('../assets/profile-placeholder.png'));
       
       // Call the onLogout prop
       if (onLogout) {

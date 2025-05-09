@@ -154,6 +154,7 @@ app.post('/api/login', async (req, res) => {
     console.log('Raw database result:', {
       ...user,
       password: '[HIDDEN]',
+      role: user.role,
       contactNumber: user.contactNumber === null ? 'NULL' : `'${user.contactNumber}'`,
       address: user.address === null ? 'NULL' : `'${user.address}'`
     });
@@ -165,11 +166,12 @@ app.post('/api/login', async (req, res) => {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
+    // Include role in token payload
     const token = jwt.sign(
       { 
         userId: user.id, 
         email: user.email,
-        role: user.role 
+        role: user.role // Ensure role is included
       },
       process.env.JWT_SECRET || 'your_jwt_secret_key',
       { expiresIn: '24h' }
@@ -192,7 +194,7 @@ app.post('/api/login', async (req, res) => {
         firstName: user.firstName,
         lastName: user.lastName,
         email: user.email,
-        role: user.role,
+        role: user.role, // Ensure role is included in response
         studentId: user.studentId || '',
         college: user.college || '',
         course: user.course || '',
@@ -207,16 +209,12 @@ app.post('/api/login', async (req, res) => {
       token: '[HIDDEN]',
       user: {
         ...responseData.user,
+        role: responseData.user.role, // Log the role
         contactNumber: `'${responseData.user.contactNumber}'`,
         address: `'${responseData.user.address}'`
       }
     });
 
-    // Double check the JSON stringification
-    const jsonString = JSON.stringify(responseData);
-    console.log('Stringified response length:', jsonString.length);
-    console.log('Sample of stringified response:', jsonString.substring(0, 100) + '...');
-    
     res.json(responseData);
   } catch (error) {
     console.error('Login error:', error);
@@ -701,6 +699,539 @@ app.use((err, req, res, next) => {
     message: 'Internal server error',
     error: process.env.NODE_ENV === 'development' ? err.message : undefined
   });
+});
+
+// Admin route - Get dashboard statistics
+app.get('/api/admin/stats', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    const [totalUsers] = await db.execute('SELECT COUNT(*) as total FROM users');
+    const [totalScholarships] = await db.execute('SELECT COUNT(*) as total FROM scholarships WHERE status = "active"');
+    const [pendingApplications] = await db.execute('SELECT COUNT(*) as total FROM applications WHERE status = "pending"');
+    const [approvedApplications] = await db.execute('SELECT COUNT(*) as total FROM applications WHERE status = "approved"');
+
+    res.json({
+      totalUsers: totalUsers[0].total,
+      activeScholarships: totalScholarships[0].total,
+      pendingApplications: pendingApplications[0].total,
+      approvedApplications: approvedApplications[0].total
+    });
+  } catch (error) {
+    console.error('Error fetching admin stats:', error);
+    res.status(500).json({ message: 'Failed to fetch admin statistics' });
+  }
+});
+
+// Get all scholarships (public)
+app.get('/api/scholarships', async (req, res) => {
+  try {
+    const [scholarships] = await db.execute(`
+      SELECT 
+        id, name, description, deadline, slots, 
+        requirements, status, amount, criteria, 
+        documents, createdAt, updatedAt,
+        (SELECT COUNT(*) FROM applications WHERE scholarshipId = scholarships.id) as applicants
+      FROM scholarships
+      WHERE status = 'active'
+      ORDER BY createdAt DESC
+    `);
+    res.json(scholarships);
+  } catch (error) {
+    console.error('Error fetching scholarships:', error);
+    res.status(500).json({ message: 'Failed to fetch scholarships' });
+  }
+});
+
+// Get single scholarship (public)
+app.get('/api/scholarships/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [scholarships] = await db.execute(`
+      SELECT 
+        id, name, description, deadline, slots, 
+        requirements, status, amount, criteria, 
+        documents, createdAt, updatedAt,
+        (SELECT COUNT(*) FROM applications WHERE scholarshipId = scholarships.id) as applicants
+      FROM scholarships 
+      WHERE id = ?
+    `, [id]);
+
+    if (scholarships.length === 0) {
+      return res.status(404).json({ message: 'Scholarship not found' });
+    }
+
+    res.json(scholarships[0]);
+  } catch (error) {
+    console.error('Error fetching scholarship:', error);
+    res.status(500).json({ message: 'Failed to fetch scholarship' });
+  }
+});
+
+// Admin route - Get all scholarships (including inactive)
+app.get('/api/admin/scholarships', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    console.log('=== Fetching Admin Scholarships ===');
+    console.log('User:', req.user);
+
+    // First, check if applications table exists
+    const [tables] = await db.execute("SHOW TABLES LIKE 'applications'");
+    const applicationsExist = tables.length > 0;
+
+    const query = applicationsExist ? `
+      SELECT 
+        id, name, description, deadline, slots, 
+        requirements, status, amount, criteria, 
+        documents, createdAt, updatedAt,
+        (SELECT COUNT(*) FROM applications WHERE scholarshipId = scholarships.id) as applicants
+      FROM scholarships
+      ORDER BY createdAt DESC
+    ` : `
+      SELECT 
+        id, name, description, deadline, slots, 
+        requirements, status, amount, criteria, 
+        documents, createdAt, updatedAt,
+        0 as applicants
+      FROM scholarships
+      ORDER BY createdAt DESC
+    `;
+
+    console.log('Executing query:', query);
+
+    const [scholarships] = await db.execute(query).catch(err => {
+      console.error('Database error:', err);
+      console.error('SQL State:', err.sqlState);
+      console.error('Error Code:', err.code);
+      console.error('Error Message:', err.message);
+      throw err;
+    });
+
+    console.log('Successfully fetched scholarships:', scholarships);
+    res.json(scholarships);
+  } catch (error) {
+    console.error('Error fetching scholarships:', error);
+    console.error('Error details:', error.message);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      message: 'Failed to fetch scholarships',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Admin route - Create scholarship
+app.post('/api/admin/scholarships', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    console.log('=== Create Scholarship Request ===');
+    console.log('User:', req.user);
+    console.log('Request body:', req.body);
+    
+    const { 
+      name, description, deadline, slots, 
+      requirements, amount, criteria, documents 
+    } = req.body;
+
+    // Validate required fields
+    if (!name || !description || !deadline || !slots || !requirements || !amount) {
+      console.log('Validation failed - Missing fields:', {
+        name: !name,
+        description: !description,
+        deadline: !deadline,
+        slots: !slots,
+        requirements: !requirements,
+        amount: !amount
+      });
+      return res.status(400).json({ 
+        message: 'Required fields missing',
+        required: {
+          name: !name,
+          description: !description,
+          deadline: !deadline,
+          slots: !slots,
+          requirements: !requirements,
+          amount: !amount
+        }
+      });
+    }
+
+    // Validate numeric fields
+    if (isNaN(slots) || slots <= 0) {
+      console.log('Validation failed - Invalid slots:', slots);
+      return res.status(400).json({ message: 'Invalid number of slots' });
+    }
+    if (isNaN(amount) || amount <= 0) {
+      console.log('Validation failed - Invalid amount:', amount);
+      return res.status(400).json({ message: 'Invalid scholarship amount' });
+    }
+
+    // Parse deadline to MySQL date format
+    const parsedDeadline = new Date(deadline).toISOString().split('T')[0];
+    console.log('Parsed deadline:', parsedDeadline);
+
+    console.log('Inserting scholarship into database with values:', {
+      name, description, deadline: parsedDeadline, slots, requirements, amount,
+      criteria: criteria || null,
+      documents: documents || null
+    });
+
+    const [result] = await db.execute(
+      `INSERT INTO scholarships (
+        name, description, deadline, slots, 
+        requirements, amount, criteria, documents
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [name, description, parsedDeadline, slots, requirements, amount, criteria || null, documents || null]
+    ).catch(err => {
+      console.error('Database error:', err);
+      console.error('SQL State:', err.sqlState);
+      console.error('Error Code:', err.code);
+      console.error('Error Message:', err.message);
+      throw err;
+    });
+
+    console.log('Scholarship created successfully:', {
+      scholarshipId: result.insertId
+    });
+
+    res.status(201).json({
+      message: 'Scholarship created successfully',
+      scholarshipId: result.insertId
+    });
+  } catch (error) {
+    console.error('Error creating scholarship:', error);
+    console.error('Error details:', error.message);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      message: 'Failed to create scholarship',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Admin route - Update scholarship
+app.put('/api/admin/scholarships/:id', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    console.log('=== Update Scholarship Request ===');
+    console.log('User:', req.user);
+    console.log('Scholarship ID:', req.params.id);
+    console.log('Request body:', req.body);
+
+    const { id } = req.params;
+    const { 
+      name, description, deadline, slots, 
+      requirements, status, amount, criteria, documents 
+    } = req.body;
+
+    // Validate required fields
+    if (!name || !description || !deadline || !slots || !requirements || !status || !amount) {
+      console.log('Validation failed - Missing fields:', {
+        name: !name,
+        description: !description,
+        deadline: !deadline,
+        slots: !slots,
+        requirements: !requirements,
+        status: !status,
+        amount: !amount
+      });
+      return res.status(400).json({ 
+        message: 'Required fields missing',
+        required: {
+          name: !name,
+          description: !description,
+          deadline: !deadline,
+          slots: !slots,
+          requirements: !requirements,
+          status: !status,
+          amount: !amount
+        }
+      });
+    }
+
+    // Validate numeric fields
+    if (isNaN(slots) || slots <= 0) {
+      console.log('Validation failed - Invalid slots:', slots);
+      return res.status(400).json({ message: 'Invalid number of slots' });
+    }
+    if (isNaN(amount) || amount <= 0) {
+      console.log('Validation failed - Invalid amount:', amount);
+      return res.status(400).json({ message: 'Invalid scholarship amount' });
+    }
+
+    // Validate status
+    if (!['active', 'inactive'].includes(status)) {
+      console.log('Validation failed - Invalid status:', status);
+      return res.status(400).json({ message: 'Invalid status value' });
+    }
+
+    // Parse deadline to MySQL date format
+    const parsedDeadline = new Date(deadline).toISOString().split('T')[0];
+    console.log('Parsed deadline:', parsedDeadline);
+
+    // Check if scholarship exists
+    console.log('Checking if scholarship exists...');
+    const [existing] = await db.execute('SELECT id FROM scholarships WHERE id = ?', [id])
+      .catch(err => {
+        console.error('Database error checking scholarship:', err);
+        throw err;
+      });
+
+    if (existing.length === 0) {
+      console.log('Scholarship not found:', id);
+      return res.status(404).json({ message: 'Scholarship not found' });
+    }
+
+    console.log('Updating scholarship with values:', {
+      name, description, deadline: parsedDeadline, slots,
+      requirements, status, amount,
+      criteria: criteria || null,
+      documents: documents || null
+    });
+
+    await db.execute(
+      `UPDATE scholarships SET 
+        name = ?, description = ?, deadline = ?, 
+        slots = ?, requirements = ?, status = ?,
+        amount = ?, criteria = ?, documents = ?
+      WHERE id = ?`,
+      [name, description, parsedDeadline, slots, requirements, status, amount, criteria || null, documents || null, id]
+    ).catch(err => {
+      console.error('Database error updating scholarship:', err);
+      console.error('SQL State:', err.sqlState);
+      console.error('Error Code:', err.code);
+      console.error('Error Message:', err.message);
+      throw err;
+    });
+
+    console.log('Scholarship updated successfully');
+    res.json({ message: 'Scholarship updated successfully' });
+  } catch (error) {
+    console.error('Error updating scholarship:', error);
+    console.error('Error details:', error.message);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      message: 'Failed to update scholarship',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Admin route - Delete scholarship
+app.delete('/api/admin/scholarships/:id', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Check if scholarship exists
+    const [existing] = await db.execute('SELECT id FROM scholarships WHERE id = ?', [id]);
+    if (existing.length === 0) {
+      return res.status(404).json({ message: 'Scholarship not found' });
+    }
+
+    // Check if there are any applications for this scholarship
+    const [applications] = await db.execute(
+      'SELECT COUNT(*) as count FROM applications WHERE scholarshipId = ?', 
+      [id]
+    );
+
+    if (applications[0].count > 0) {
+      return res.status(400).json({ 
+        message: 'Cannot delete scholarship with existing applications. Consider marking it as inactive instead.' 
+      });
+    }
+
+    await db.execute('DELETE FROM scholarships WHERE id = ?', [id]);
+    res.json({ message: 'Scholarship deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting scholarship:', error);
+    res.status(500).json({ message: 'Failed to delete scholarship' });
+  }
+});
+
+// Admin route - Get all applications
+app.get('/api/admin/applications', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    const [applications] = await db.execute(`
+      SELECT a.*, 
+             u.firstName, u.lastName, u.email,
+             s.name as scholarshipName
+      FROM applications a
+      JOIN users u ON a.userId = u.id
+      JOIN scholarships s ON a.scholarshipId = s.id
+      ORDER BY a.createdAt DESC
+    `);
+    res.json(applications);
+  } catch (error) {
+    console.error('Error fetching applications:', error);
+    res.status(500).json({ message: 'Failed to fetch applications' });
+  }
+});
+
+// Admin route - Update application status
+app.patch('/api/admin/applications/:id/status', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, remarks } = req.body;
+
+    if (!['pending', 'approved', 'rejected'].includes(status)) {
+      return res.status(400).json({ message: 'Invalid status' });
+    }
+
+    await db.execute(
+      'UPDATE applications SET status = ?, remarks = ? WHERE id = ?',
+      [status, remarks || null, id]
+    );
+
+    res.json({ message: 'Application status updated successfully' });
+  } catch (error) {
+    console.error('Error updating application status:', error);
+    res.status(500).json({ message: 'Failed to update application status' });
+  }
+});
+
+// Get all announcements (public)
+app.get('/api/announcements', async (req, res) => {
+  try {
+    const [announcements] = await db.execute(`
+      SELECT id, title, content, priority, status, createdAt, updatedAt
+      FROM announcements
+      WHERE status = 'active'
+      ORDER BY 
+        CASE priority
+          WHEN 'high' THEN 1
+          WHEN 'normal' THEN 2
+          WHEN 'low' THEN 3
+        END,
+        createdAt DESC
+    `);
+    res.json(announcements);
+  } catch (error) {
+    console.error('Error fetching announcements:', error);
+    res.status(500).json({ message: 'Failed to fetch announcements' });
+  }
+});
+
+// Admin route - Get all announcements (including inactive)
+app.get('/api/admin/announcements', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    const [announcements] = await db.execute(`
+      SELECT id, title, content, priority, status, createdAt, updatedAt
+      FROM announcements
+      ORDER BY 
+        CASE priority
+          WHEN 'high' THEN 1
+          WHEN 'normal' THEN 2
+          WHEN 'low' THEN 3
+        END,
+        createdAt DESC
+    `);
+    res.json(announcements);
+  } catch (error) {
+    console.error('Error fetching announcements:', error);
+    res.status(500).json({ message: 'Failed to fetch announcements' });
+  }
+});
+
+// Admin route - Create announcement
+app.post('/api/admin/announcements', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    const { title, content, priority = 'normal', status = 'active' } = req.body;
+
+    // Validate required fields
+    if (!title || !content) {
+      return res.status(400).json({ 
+        message: 'Required fields missing',
+        required: {
+          title: !title,
+          content: !content
+        }
+      });
+    }
+
+    // Validate priority
+    if (!['high', 'normal', 'low'].includes(priority)) {
+      return res.status(400).json({ message: 'Invalid priority value' });
+    }
+
+    // Validate status
+    if (!['active', 'inactive'].includes(status)) {
+      return res.status(400).json({ message: 'Invalid status value' });
+    }
+
+    const [result] = await db.execute(
+      'INSERT INTO announcements (title, content, priority, status) VALUES (?, ?, ?, ?)',
+      [title, content, priority, status]
+    );
+
+    res.status(201).json({
+      message: 'Announcement created successfully',
+      announcementId: result.insertId
+    });
+  } catch (error) {
+    console.error('Error creating announcement:', error);
+    res.status(500).json({ message: 'Failed to create announcement' });
+  }
+});
+
+// Admin route - Update announcement
+app.put('/api/admin/announcements/:id', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, content, priority, status } = req.body;
+
+    // Validate required fields
+    if (!title || !content || !priority || !status) {
+      return res.status(400).json({ 
+        message: 'Required fields missing',
+        required: {
+          title: !title,
+          content: !content,
+          priority: !priority,
+          status: !status
+        }
+      });
+    }
+
+    // Validate priority
+    if (!['high', 'normal', 'low'].includes(priority)) {
+      return res.status(400).json({ message: 'Invalid priority value' });
+    }
+
+    // Validate status
+    if (!['active', 'inactive'].includes(status)) {
+      return res.status(400).json({ message: 'Invalid status value' });
+    }
+
+    // Check if announcement exists
+    const [existing] = await db.execute('SELECT id FROM announcements WHERE id = ?', [id]);
+    if (existing.length === 0) {
+      return res.status(404).json({ message: 'Announcement not found' });
+    }
+
+    await db.execute(
+      'UPDATE announcements SET title = ?, content = ?, priority = ?, status = ? WHERE id = ?',
+      [title, content, priority, status, id]
+    );
+
+    res.json({ message: 'Announcement updated successfully' });
+  } catch (error) {
+    console.error('Error updating announcement:', error);
+    res.status(500).json({ message: 'Failed to update announcement' });
+  }
+});
+
+// Admin route - Delete announcement
+app.delete('/api/admin/announcements/:id', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Check if announcement exists
+    const [existing] = await db.execute('SELECT id FROM announcements WHERE id = ?', [id]);
+    if (existing.length === 0) {
+      return res.status(404).json({ message: 'Announcement not found' });
+    }
+
+    await db.execute('DELETE FROM announcements WHERE id = ?', [id]);
+    res.json({ message: 'Announcement deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting announcement:', error);
+    res.status(500).json({ message: 'Failed to delete announcement' });
+  }
 });
 
 const PORT = process.env.PORT || 3000;

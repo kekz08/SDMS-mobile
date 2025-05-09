@@ -53,6 +53,7 @@ export default function LoginScreen({ onLogin, onLogout }) {
         token: data.token ? '[HIDDEN]' : undefined,
         user: data.user ? {
           ...data.user,
+          role: data.user.role,
           contactNumber: `'${data.user.contactNumber}'`,
           address: `'${data.user.address}'`
         } : undefined
@@ -66,6 +67,7 @@ export default function LoginScreen({ onLogin, onLogout }) {
       console.log('=== Storing User Data ===');
       console.log('Data to be stored:', {
         ...data.user,
+        role: data.user.role,
         contactNumber: `'${data.user.contactNumber}'`,
         address: `'${data.user.address}'`
       });
@@ -79,15 +81,29 @@ export default function LoginScreen({ onLogin, onLogout }) {
       const parsedStoredData = JSON.parse(storedData);
       console.log('Data retrieved from storage:', {
         ...parsedStoredData,
+        role: parsedStoredData.role,
         contactNumber: `'${parsedStoredData.contactNumber}'`,
         address: `'${parsedStoredData.address}'`
       });
 
-      // Call onLogin and navigate to Dashboard
+      // Call onLogin and navigate based on role
       if (onLogin) {
         onLogin();
       }
-      navigation.navigate('Home');
+      
+      // Ensure role-based navigation
+      const targetRoute = data.user.role === 'admin' ? 'AdminDashboard' : 'Dashboard';
+      console.log('=== Navigation Decision ===');
+      console.log('User role:', data.user.role);
+      console.log('Target route:', targetRoute);
+
+      // Force a slight delay to ensure AsyncStorage is updated
+      setTimeout(() => {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: targetRoute }],
+        });
+      }, 100);
     } catch (error) {
       console.error('Login error:', error);
       Alert.alert('Error', error.message || 'Something went wrong');
