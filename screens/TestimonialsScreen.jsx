@@ -118,7 +118,8 @@ export default function TestimonialScreen() {
         >
           <Image 
             source={testimonials[testimonialIndex].image} 
-            style={styles.profileImage} 
+            style={styles.profileImage}
+            resizeMode="cover"
           />
           <Text style={styles.clientSays}>What Our Scholars Say</Text>
           <Text style={styles.quote}>&quot;{testimonials[testimonialIndex].quote}&quot;</Text>

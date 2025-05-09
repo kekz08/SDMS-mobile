@@ -218,7 +218,11 @@ export default function RegistrationScreen() {
     <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
       <View style={styles.container}>
         <LinearGradient colors={['#005500', '#007000', '#009000']} style={styles.gradient} />
-        <Image source={require('../assets/logo.png')} style={styles.bgLogo} />
+        <Image 
+          source={require('../assets/logo.png')} 
+          style={styles.bgLogo} 
+          resizeMode="contain"
+        />
 
         <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.openDrawer()}>

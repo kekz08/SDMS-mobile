@@ -225,7 +225,11 @@ const ScholarshipScreen = () => {
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       />
-      <Image source={require('../assets/logo.png')} style={styles.bgLogo} />
+      <Image 
+        source={require('../assets/logo.png')} 
+        style={styles.bgLogo} 
+        resizeMode="contain"
+      />
 
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.openDrawer()}>
@@ -441,10 +445,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     overflow: 'hidden',
     elevation: 5,
-    shadowColor: '#FFA000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
+    boxShadow: '0px 4px 6px rgba(255, 165, 0, 0.3)',
   },
   gradientButton: {
     paddingVertical: 16,

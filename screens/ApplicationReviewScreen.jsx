@@ -9,12 +9,16 @@ import {
   Alert,
   ActivityIndicator,
   TextInput,
+  ScrollView,
+  Linking,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const API_URL = 'http://192.168.254.101:3000/api';
+const BASE_URL = 'http://192.168.254.101:3000';
 
 export default function ApplicationReviewScreen({ navigation }) {
   const [applications, setApplications] = useState([]);
@@ -81,6 +85,50 @@ export default function ApplicationReviewScreen({ navigation }) {
       Alert.alert('Success', 'Application status updated successfully');
     } catch (error) {
       Alert.alert('Error', error.message);
+    }
+  };
+
+  const handleViewDocument = async (documentPath) => {
+    try {
+      if (!documentPath) {
+        Alert.alert('Error', 'Document path not found');
+        return;
+      }
+
+      // Parse documents if it's a string
+      let documents = selectedApplication.documents;
+      if (typeof documents === 'string') {
+        try {
+          documents = JSON.parse(documents);
+        } catch (err) {
+          console.error('Error parsing documents JSON:', err);
+          Alert.alert('Error', 'Invalid document data');
+          return;
+        }
+      }
+
+      // Get the actual document path
+      const actualPath = documents[documentPath];
+      if (!actualPath) {
+        Alert.alert('Error', 'Document not found');
+        return;
+      }
+
+      const fullUrl = actualPath.startsWith('http') 
+        ? actualPath 
+        : `${BASE_URL}/${actualPath}`;
+
+      console.log('Opening document:', fullUrl);
+      
+      const supported = await Linking.canOpenURL(fullUrl);
+      if (supported) {
+        await Linking.openURL(fullUrl);
+      } else {
+        Alert.alert('Error', 'Cannot open this document');
+      }
+    } catch (error) {
+      console.error('Error opening document:', error);
+      Alert.alert('Error', 'Failed to open document');
     }
   };
 
@@ -224,52 +272,163 @@ export default function ApplicationReviewScreen({ navigation }) {
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Review Application</Text>
-            
-            {selectedApplication && (
-              <View style={styles.modalDetails}>
-                <Text style={styles.modalSubtitle}>
-                  {selectedApplication.firstName} {selectedApplication.lastName}
-                </Text>
-                <Text style={styles.modalScholarship}>
-                  {selectedApplication.scholarshipName}
-                </Text>
-              </View>
-            )}
-
-            <TextInput
-              style={styles.remarksInput}
-              placeholder="Add remarks..."
-              value={remarks}
-              onChangeText={setRemarks}
-              multiline
-              numberOfLines={4}
-            />
-
-            <View style={styles.actionButtons}>
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: '#4CAF50' }]}
-                onPress={() => handleStatusUpdate('approved')}
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Application Details</Text>
+              <TouchableOpacity 
+                style={styles.closeButton}
+                onPress={() => setModalVisible(false)}
               >
-                <Ionicons name="checkmark-circle-outline" size={20} color="white" />
-                <Text style={styles.actionButtonText}>Approve</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: '#F44336' }]}
-                onPress={() => handleStatusUpdate('rejected')}
-              >
-                <Ionicons name="close-circle-outline" size={20} color="white" />
-                <Text style={styles.actionButtonText}>Reject</Text>
+                <Ionicons name="close" size={24} color="#666" />
               </TouchableOpacity>
             </View>
+            
+            {selectedApplication && (
+              <ScrollView style={styles.modalScrollView}>
+                <View style={styles.modalSection}>
+                  <Text style={styles.sectionTitle}>Personal Information</Text>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Full Name:</Text>
+                    <Text style={styles.detailValue}>
+                      {selectedApplication.firstName} {selectedApplication.lastName}
+                    </Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Email:</Text>
+                    <Text style={styles.detailValue}>{selectedApplication.email}</Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Student ID:</Text>
+                    <Text style={styles.detailValue}>{selectedApplication.studentId}</Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Contact:</Text>
+                    <Text style={styles.detailValue}>{selectedApplication.contactNumber}</Text>
+                  </View>
+                </View>
 
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => setModalVisible(false)}
-            >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
-            </TouchableOpacity>
+                <View style={styles.modalSection}>
+                  <Text style={styles.sectionTitle}>Academic Information</Text>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>College:</Text>
+                    <Text style={styles.detailValue}>{selectedApplication.college}</Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Course:</Text>
+                    <Text style={styles.detailValue}>{selectedApplication.course}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.modalSection}>
+                  <Text style={styles.sectionTitle}>Scholarship Details</Text>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Scholarship:</Text>
+                    <Text style={styles.detailValue}>{selectedApplication.scholarshipName}</Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Applied Date:</Text>
+                    <Text style={styles.detailValue}>
+                      {new Date(selectedApplication.createdAt).toLocaleDateString()}
+                    </Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Status:</Text>
+                    <View style={[
+                      styles.statusBadge,
+                      { backgroundColor: getStatusColor(selectedApplication.status) }
+                    ]}>
+                      <Text style={styles.statusText}>
+                        {selectedApplication.status.toUpperCase()}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.modalSection}>
+                  <Text style={styles.sectionTitle}>Submitted Documents</Text>
+                  {selectedApplication?.documents ? (
+                    <View>
+                      <TouchableOpacity
+                        style={styles.documentItem}
+                        onPress={() => handleViewDocument('reportCard')}
+                      >
+                        <View style={styles.documentIconContainer}>
+                          <Ionicons name="document-text" size={24} color="#008000" />
+                        </View>
+                        <View style={styles.documentInfo}>
+                          <Text style={styles.documentName}>Report Card</Text>
+                          <Text style={styles.documentType}>Academic Document</Text>
+                        </View>
+                        <Ionicons name="open-outline" size={20} color="#666" />
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.documentItem}
+                        onPress={() => handleViewDocument('brgyClearance')}
+                      >
+                        <View style={styles.documentIconContainer}>
+                          <Ionicons name="document-text" size={24} color="#008000" />
+                        </View>
+                        <View style={styles.documentInfo}>
+                          <Text style={styles.documentName}>Barangay Clearance</Text>
+                          <Text style={styles.documentType}>Government Document</Text>
+                        </View>
+                        <Ionicons name="open-outline" size={20} color="#666" />
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.documentItem}
+                        onPress={() => handleViewDocument('incomeCertificate')}
+                      >
+                        <View style={styles.documentIconContainer}>
+                          <Ionicons name="document-text" size={24} color="#008000" />
+                        </View>
+                        <View style={styles.documentInfo}>
+                          <Text style={styles.documentName}>Income Certificate</Text>
+                          <Text style={styles.documentType}>Financial Document</Text>
+                        </View>
+                        <Ionicons name="open-outline" size={20} color="#666" />
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View style={styles.noDocuments}>
+                      <Ionicons name="document-outline" size={40} color="#ccc" />
+                      <Text style={styles.noDocumentsText}>No documents submitted</Text>
+                    </View>
+                  )}
+                </View>
+
+                <View style={styles.modalSection}>
+                  <Text style={styles.sectionTitle}>Review</Text>
+                  <TextInput
+                    style={styles.remarksInput}
+                    placeholder="Add remarks or notes about the application..."
+                    value={remarks}
+                    onChangeText={setRemarks}
+                    multiline
+                    numberOfLines={4}
+                    placeholderTextColor="#999"
+                  />
+                </View>
+
+                <View style={styles.actionButtons}>
+                  <TouchableOpacity
+                    style={[styles.actionButton, { backgroundColor: '#4CAF50' }]}
+                    onPress={() => handleStatusUpdate('approved')}
+                  >
+                    <Ionicons name="checkmark-circle-outline" size={20} color="white" />
+                    <Text style={styles.actionButtonText}>Approve</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.actionButton, { backgroundColor: '#F44336' }]}
+                    onPress={() => handleStatusUpdate('rejected')}
+                  >
+                    <Ionicons name="close-circle-outline" size={20} color="white" />
+                    <Text style={styles.actionButtonText}>Reject</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            )}
           </View>
         </View>
       </Modal>
@@ -393,62 +552,130 @@ const styles = StyleSheet.create({
   modalContent: {
     backgroundColor: 'white',
     borderRadius: 15,
-    padding: 20,
     width: '90%',
+    maxHeight: '80%',
+    padding: 0,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    marginBottom: 15,
-    textAlign: 'center',
+    color: '#333',
   },
-  modalDetails: {
+  closeButton: {
+    padding: 5,
+  },
+  modalScrollView: {
+    padding: 15,
+  },
+  modalSection: {
     marginBottom: 20,
   },
-  modalSubtitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 5,
-  },
-  modalScholarship: {
+  sectionTitle: {
     fontSize: 16,
+    fontWeight: 'bold',
+    color: '#008000',
+    marginBottom: 10,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  detailLabel: {
+    fontSize: 14,
     color: '#666',
+    flex: 1,
+  },
+  detailValue: {
+    fontSize: 14,
+    color: '#333',
+    flex: 2,
+    textAlign: 'right',
   },
   remarksInput: {
     borderWidth: 1,
     borderColor: '#ddd',
-    borderRadius: 5,
-    padding: 10,
-    marginBottom: 20,
+    borderRadius: 8,
+    padding: 12,
     height: 100,
     textAlignVertical: 'top',
+    fontSize: 14,
+    color: '#333',
+    backgroundColor: '#f9f9f9',
   },
   actionButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 15,
+    marginTop: 20,
+    marginBottom: 10,
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 10,
-    borderRadius: 5,
+    padding: 12,
+    borderRadius: 8,
     flex: 1,
     marginHorizontal: 5,
     justifyContent: 'center',
-    gap: 5,
   },
   actionButtonText: {
     color: 'white',
     fontWeight: 'bold',
+    marginLeft: 5,
   },
-  cancelButton: {
+  documentItem: {
+    flexDirection: 'row',
     alignItems: 'center',
-    padding: 10,
+    backgroundColor: '#f8f8f8',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#eee',
   },
-  cancelButtonText: {
+  documentIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#e8f5e9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  documentInfo: {
+    flex: 1,
+    marginRight: 8,
+  },
+  documentName: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  documentType: {
+    fontSize: 12,
     color: '#666',
-    fontWeight: 'bold',
+  },
+  noDocuments: {
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#f8f8f8',
+    borderRadius: 8,
+  },
+  noDocumentsText: {
+    marginTop: 10,
+    color: '#666',
+    fontSize: 14,
   },
 }); 

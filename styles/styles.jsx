@@ -8,7 +8,6 @@ export const commonStyles = StyleSheet.create({
     position: 'absolute',
     width: '140%',
     height: '85%',
-    resizeMode: 'contain',
     opacity: 0.15,
     bottom: '8%',
     right: '-40%',
@@ -29,7 +28,10 @@ export const commonStyles = StyleSheet.create({
   backButton: { padding: 10, marginRight: 10 },
   logoContainer: { flexDirection: 'row', alignItems: 'center', flex: 1, justifyContent: 'space-between' },
   title: { fontSize: 22, fontWeight: 'bold', color: 'white' },
-  logo: { width: 40, height: 40, resizeMode: 'contain' },
+  logo: { 
+    width: 40, 
+    height: 40
+  },
 
   heading: { fontSize: 22, fontWeight: 'bold', color: 'white', marginTop: 30, textAlign: 'center' },
   description: { fontSize: 16, color: 'white', textAlign: 'center', width: '80%', marginTop: 10 },

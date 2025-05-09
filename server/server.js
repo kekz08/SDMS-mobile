@@ -10,34 +10,51 @@ require('dotenv').config();
 
 const app = express();
 
-// Configure multer for file upload
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const uploadDir = 'uploads/profile-pictures';
-    // Create directory if it doesn't exist
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
+// Configure multer for profile pictures
+const profileStorage = multer.diskStorage({
+  destination: async function (req, file, cb) {
+    const dir = path.join(__dirname, 'uploads', 'profiles');
+    try {
+      await fs.promises.mkdir(dir, { recursive: true });
+      cb(null, dir);
+    } catch (err) {
+      cb(err);
     }
-    cb(null, uploadDir);
   },
   filename: function (req, file, cb) {
-    // Use userId in filename to ensure uniqueness and easy cleanup
-    const uniqueSuffix = `${req.user.userId}-${Date.now()}${path.extname(file.originalname)}`;
-    cb(null, uniqueSuffix);
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'profile-' + uniqueSuffix + path.extname(file.originalname));
   }
 });
 
-const upload = multer({ 
-  storage: storage,
+// Configure multer for scholarship documents
+const documentStorage = multer.diskStorage({
+  destination: async function (req, file, cb) {
+    const dir = path.join(__dirname, 'uploads', 'documents');
+    try {
+      await fs.promises.mkdir(dir, { recursive: true });
+      cb(null, dir);
+    } catch (err) {
+      cb(err);
+    }
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'doc-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const uploadProfile = multer({ 
+  storage: profileStorage,
   limits: {
     fileSize: 5 * 1024 * 1024 // 5MB limit
-  },
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Not an image! Please upload an image.'), false);
-    }
+  }
+});
+
+const uploadDocuments = multer({ 
+  storage: documentStorage,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
   }
 });
 
@@ -417,7 +434,7 @@ app.use((req, res, next) => {
 });
 
 // Profile picture upload endpoint
-app.post('/api/users/profile-picture', authenticateToken, upload.single('profileImage'), async (req, res) => {
+app.post('/api/users/profile-picture', authenticateToken, uploadProfile.single('profileImage'), async (req, res) => {
   try {
     console.log('=== Profile Picture Upload ===');
     console.log('User ID:', req.user.userId);
@@ -673,21 +690,46 @@ app.post('/api/users/change-password', authenticateToken, async (req, res) => {
   }
 });
 
-// Serve uploaded files
-app.use('/uploads', (req, res, next) => {
-  console.log('Serving static file:', req.url);
-  next();
-}, express.static('uploads'));
+// Serve uploaded files from both directories
+app.use('/uploads/profiles', express.static(path.join(__dirname, 'uploads', 'profiles')));
+app.use('/uploads/documents', express.static(path.join(__dirname, 'uploads', 'documents')));
 
-// Add a specific route to check if a file exists
-app.get('/uploads/*', (req, res, next) => {
-  const filePath = path.join(__dirname, req.url);
-  console.log('Checking file existence:', filePath);
-  if (fs.existsSync(filePath)) {
-    console.log('File exists');
+// Add specific routes to check if files exist
+app.get('/uploads/profiles/*', (req, res, next) => {
+  const profilePath = path.join(__dirname, req.url);
+  console.log('Checking profile file existence:', profilePath);
+  if (fs.existsSync(profilePath)) {
+    console.log('Profile file exists');
     next();
   } else {
-    console.log('File not found');
+    console.log('Profile file not found');
+    res.status(404).send('File not found');
+  }
+});
+
+app.get('/uploads/documents/*', (req, res, next) => {
+  const documentPath = path.join(__dirname, req.url);
+  console.log('Checking document file existence:', documentPath);
+  if (fs.existsSync(documentPath)) {
+    console.log('Document file exists');
+    next();
+  } else {
+    console.log('Document file not found');
+    res.status(404).send('File not found');
+  }
+});
+
+// Add a route to serve files directly
+app.get('/uploads/:type/:filename', (req, res) => {
+  const { type, filename } = req.params;
+  const uploadPath = path.join(__dirname, 'uploads', type, filename);
+  
+  console.log('Attempting to serve file:', uploadPath);
+  
+  if (fs.existsSync(uploadPath)) {
+    res.sendFile(uploadPath);
+  } else {
+    console.log('File not found:', uploadPath);
     res.status(404).send('File not found');
   }
 });
@@ -721,23 +763,55 @@ app.get('/api/admin/stats', authenticateToken, isAdmin, async (req, res) => {
   }
 });
 
-// Get all scholarships (public)
+// Get all scholarships endpoint
 app.get('/api/scholarships', async (req, res) => {
   try {
-    const [scholarships] = await db.execute(`
+    console.log('=== Fetching Scholarships ===');
+    
+    const query = `
       SELECT 
-        id, name, description, deadline, slots, 
-        requirements, status, amount, criteria, 
-        documents, createdAt, updatedAt,
-        (SELECT COUNT(*) FROM applications WHERE scholarshipId = scholarships.id) as applicants
+        id,
+        name,
+        description,
+        deadline,
+        slots,
+        requirements,
+        status,
+        amount,
+        criteria,
+        documents,
+        createdAt,
+        updatedAt
       FROM scholarships
-      WHERE status = 'active'
       ORDER BY createdAt DESC
-    `);
-    res.json(scholarships);
+    `;
+    
+    const [scholarships] = await db.execute(query);
+    
+    // Format the response data
+    const formattedScholarships = scholarships.map(scholarship => ({
+      id: scholarship.id,
+      name: scholarship.name,
+      description: scholarship.description,
+      deadline: scholarship.deadline,
+      slots: scholarship.slots,
+      requirements: scholarship.requirements,
+      status: scholarship.status,
+      amount: parseFloat(scholarship.amount),
+      criteria: scholarship.criteria,
+      documents: scholarship.documents,
+      createdAt: scholarship.createdAt,
+      updatedAt: scholarship.updatedAt
+    }));
+
+    console.log(`Found ${formattedScholarships.length} scholarships`);
+    res.json(formattedScholarships);
   } catch (error) {
     console.error('Error fetching scholarships:', error);
-    res.status(500).json({ message: 'Failed to fetch scholarships' });
+    res.status(500).json({ 
+      message: 'Failed to fetch scholarships',
+      error: error.message 
+    });
   }
 });
 
@@ -1048,14 +1122,40 @@ app.get('/api/admin/applications', authenticateToken, isAdmin, async (req, res) 
   try {
     const [applications] = await db.execute(`
       SELECT a.*, 
-             u.firstName, u.lastName, u.email,
+             u.firstName, u.lastName, u.email, u.studentId, u.contactNumber,
+             u.college, u.course,
              s.name as scholarshipName
       FROM applications a
       JOIN users u ON a.userId = u.id
       JOIN scholarships s ON a.scholarshipId = s.id
       ORDER BY a.createdAt DESC
     `);
-    res.json(applications);
+
+    // Parse the documents JSON for each application
+    const applicationsWithDocs = applications.map(app => {
+      let documents = [];
+      if (app.documents) {
+        try {
+          const docsObj = JSON.parse(app.documents);
+          documents = Object.entries(docsObj).map(([type, path]) => ({
+            id: `${app.id}-${type}`,
+            name: type,
+            path: path,
+            type: type,
+            createdAt: app.createdAt
+          }));
+        } catch (err) {
+          console.error(`Error parsing documents JSON for application ${app.id}:`, err);
+        }
+      }
+      
+      return {
+        ...app,
+        documents: documents
+      };
+    });
+
+    res.json(applicationsWithDocs);
   } catch (error) {
     console.error('Error fetching applications:', error);
     res.status(500).json({ message: 'Failed to fetch applications' });
@@ -1234,6 +1334,190 @@ app.delete('/api/admin/announcements/:id', authenticateToken, isAdmin, async (re
   }
 });
 
+// Submit scholarship application
+app.post('/api/applications', authenticateToken, uploadDocuments.fields([
+  { name: 'reportCard', maxCount: 1 },
+  { name: 'brgyClearance', maxCount: 1 },
+  { name: 'incomeCertificate', maxCount: 1 }
+]), async (req, res) => {
+  try {
+    console.log('=== Submit Application Request ===');
+    console.log('User:', req.user);
+    console.log('Request body:', req.body);
+    console.log('Files:', req.files);
+
+    const { scholarshipId, userId } = req.body;
+    const remarks = req.body.remarks || '';
+
+    // Validate required fields
+    if (!scholarshipId || !userId || !req.files) {
+      console.log('Missing required fields:', {
+        scholarshipId: !scholarshipId,
+        userId: !userId,
+        files: !req.files
+      });
+      return res.status(400).json({ 
+        message: 'Required fields missing',
+        required: {
+          scholarshipId: !scholarshipId,
+          userId: !userId,
+          files: !req.files
+        }
+      });
+    }
+
+    // Check if all required files are present
+    if (!req.files.reportCard?.[0] || !req.files.brgyClearance?.[0] || !req.files.incomeCertificate?.[0]) {
+      console.log('Missing required files:', {
+        reportCard: !req.files.reportCard?.[0],
+        brgyClearance: !req.files.brgyClearance?.[0],
+        incomeCertificate: !req.files.incomeCertificate?.[0]
+      });
+      return res.status(400).json({ 
+        message: 'All required documents must be uploaded',
+        missing: {
+          reportCard: !req.files.reportCard?.[0],
+          brgyClearance: !req.files.brgyClearance?.[0],
+          incomeCertificate: !req.files.incomeCertificate?.[0]
+        }
+      });
+    }
+
+    // Check if scholarship exists and is active
+    const [scholarships] = await db.execute(
+      'SELECT * FROM scholarships WHERE id = ? AND status = "active"',
+      [scholarshipId]
+    );
+
+    if (scholarships.length === 0) {
+      console.log('Scholarship not found or inactive:', scholarshipId);
+      return res.status(404).json({ message: 'Scholarship not found or inactive' });
+    }
+
+    // Check if user has already applied
+    const [existingApplications] = await db.execute(
+      'SELECT * FROM applications WHERE userId = ? AND scholarshipId = ?',
+      [userId, scholarshipId]
+    );
+
+    if (existingApplications.length > 0) {
+      console.log('User already applied:', { userId, scholarshipId });
+      return res.status(400).json({ message: 'You have already applied for this scholarship' });
+    }
+
+    // Prepare documents object with file paths
+    const documents = {
+      reportCard: req.files.reportCard[0].path.replace(path.join(__dirname, '/'), '').replace(/\\/g, '/'),
+      brgyClearance: req.files.brgyClearance[0].path.replace(path.join(__dirname, '/'), '').replace(/\\/g, '/'),
+      incomeCertificate: req.files.incomeCertificate[0].path.replace(path.join(__dirname, '/'), '').replace(/\\/g, '/')
+    };
+
+    console.log('Saving documents:', documents);
+
+    // Insert application
+    const [result] = await db.execute(
+      `INSERT INTO applications (
+        userId, scholarshipId, status, remarks, documents
+      ) VALUES (?, ?, 'pending', ?, ?)`,
+      [userId, scholarshipId, remarks, JSON.stringify(documents)]
+    );
+
+    console.log('Application submitted successfully:', {
+      applicationId: result.insertId,
+      documents: documents
+    });
+
+    res.status(201).json({
+      message: 'Application submitted successfully',
+      applicationId: result.insertId,
+      documents: documents
+    });
+  } catch (error) {
+    console.error('Error submitting application:', error);
+    res.status(500).json({ 
+      message: 'Failed to submit application',
+      error: error.message 
+    });
+  }
+});
+
+// Get user's applications
+app.get('/api/user/applications', authenticateToken, async (req, res) => {
+  try {
+    console.log('=== Fetching User Applications ===');
+    console.log('User ID:', req.user.userId);
+
+    // First check if the applications table exists
+    const [tables] = await db.execute("SHOW TABLES LIKE 'applications'");
+    if (tables.length === 0) {
+      console.log('Applications table does not exist');
+      return res.json({
+        statusCounts: { approved: 0, pending: 0, rejected: 0 },
+        applications: []
+      });
+    }
+
+    // Get application counts by status
+    console.log('Fetching status counts...');
+    const [statusCounts] = await db.execute(`
+      SELECT 
+        IFNULL(status, 'pending') as status,
+        COUNT(*) as count
+      FROM applications
+      WHERE userId = ?
+      GROUP BY status
+    `, [req.user.userId]);
+
+    console.log('Status counts:', statusCounts);
+
+    // Get detailed application information
+    console.log('Fetching application details...');
+    const [applications] = await db.execute(`
+      SELECT 
+        a.*,
+        s.name as scholarshipName,
+        s.amount as scholarshipAmount
+      FROM applications a
+      JOIN scholarships s ON a.scholarshipId = s.id
+      WHERE a.userId = ?
+      ORDER BY a.createdAt DESC
+    `, [req.user.userId]);
+
+    console.log('Applications found:', applications.length);
+
+    // Format the response
+    const counts = {
+      approved: 0,
+      pending: 0,
+      rejected: 0
+    };
+
+    statusCounts.forEach(({ status, count }) => {
+      counts[status.toLowerCase()] = count;
+    });
+
+    console.log('Final counts:', counts);
+    console.log('Sending response...');
+
+    res.json({
+      statusCounts: counts,
+      applications: applications
+    });
+  } catch (error) {
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      sqlState: error.sqlState,
+      sqlMessage: error.sqlMessage
+    });
+    res.status(500).json({ 
+      message: 'Failed to fetch applications',
+      error: error.message
+    });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 const HOST = '192.168.254.101'; // Use your local IP address
 
@@ -1243,9 +1527,8 @@ app.listen(PORT, HOST, () => {
   console.log(`Server bound to ${HOST}`);
   console.log(`API URL: http://${HOST}:${PORT}/api`);
   console.log('\nRegistered Routes:');
-  console.log(app._router.stack
+  const routes = app._router.stack
     .filter(r => r.route)
-    .map(r => `${Object.keys(r.route.methods).join(',')} ${r.route.path}`)
-    .join('\n')
-  );
+    .map(r => `${Object.keys(r.route.methods).join(',')} ${r.route.path}`);
+  console.log(routes.join('\n'));
 }); 

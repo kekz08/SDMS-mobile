@@ -79,7 +79,11 @@ export default function ConcernScreen() {
       <View style={styles.container}>
         <LinearGradient colors={['#005500', '#007000', '#009000']} style={styles.gradient} />
 
-        <Image source={require('../assets/logo.png')} style={styles.bgLogo} />
+        <Image 
+          source={require('../assets/logo.png')} 
+          style={styles.bgLogo} 
+          resizeMode="contain"
+        />
 
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.openDrawer()}>
@@ -165,7 +169,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: '140%',
     height: '85%',
-    resizeMode: 'contain',
     opacity: 0.15,
     bottom: '8%',
     right: '-40%',
