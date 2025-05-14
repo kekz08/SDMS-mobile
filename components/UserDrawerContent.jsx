@@ -4,16 +4,19 @@ import { DrawerContentScrollView, DrawerItem } from '@react-navigation/drawer';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
-
-const BASE_URL = 'http://192.168.254.101:3000';
+import { BASE_URL } from '../config';
+import { useIsFocused } from '@react-navigation/native';
 
 export default function UserDrawerContent({ navigation, onLogout }) {
   const [userData, setUserData] = useState(null);
   const [profileImage, setProfileImage] = useState(require('../assets/profile-placeholder.png'));
+  const isFocused = useIsFocused();
 
   useEffect(() => {
-    loadUserData();
-  }, []);
+    if (isFocused) {
+      loadUserData();
+    }
+  }, [isFocused]);
 
   const loadUserData = async () => {
     try {

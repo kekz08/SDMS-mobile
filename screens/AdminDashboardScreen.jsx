@@ -20,9 +20,7 @@ import { BarChart, PieChart } from 'react-native-chart-kit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NotificationPopup from '../components/NotificationPopup';
 import NotificationBadge from '../components/NotificationBadge';
-
-const API_URL = 'http://192.168.254.101:3000/api';
-const BASE_URL = 'http://192.168.254.101:3000';
+import { API_URL, BASE_URL } from '../config';
 
 export default function AdminDashboardScreen() {
   const navigation = useNavigation();

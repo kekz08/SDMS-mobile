@@ -12,13 +12,12 @@ import {
   ScrollView,
   Linking,
   Image,
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const API_URL = 'http://192.168.254.101:3000/api';
-const BASE_URL = 'http://192.168.254.101:3000';
+import { API_URL, BASE_URL } from '../config';
 
 export default function ApplicationReviewScreen({ navigation }) {
   const [applications, setApplications] = useState([]);
@@ -27,6 +26,9 @@ export default function ApplicationReviewScreen({ navigation }) {
   const [selectedApplication, setSelectedApplication] = useState(null);
   const [remarks, setRemarks] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [imageModalVisible, setImageModalVisible] = useState(false);
+  const [imageToView, setImageToView] = useState(null);
+  const [nonImageDocUrl, setNonImageDocUrl] = useState(null);
 
   useEffect(() => {
     fetchApplications();
@@ -147,6 +149,11 @@ export default function ApplicationReviewScreen({ navigation }) {
     }
   };
 
+  // Helper to check if a file is an image
+  const isImageFile = (url) => {
+    return /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(url);
+  };
+
   const handleViewDocument = async (documentPath) => {
     try {
       if (!documentPath) {
@@ -154,8 +161,8 @@ export default function ApplicationReviewScreen({ navigation }) {
         return;
       }
 
-      // Parse documents if it's a string
       let documents = selectedApplication.documents;
+      console.log('Raw documents value:', documents);
       if (typeof documents === 'string') {
         try {
           documents = JSON.parse(documents);
@@ -165,11 +172,17 @@ export default function ApplicationReviewScreen({ navigation }) {
           return;
         }
       }
+      if (!documents || typeof documents !== 'object') {
+        Alert.alert('Error', 'No documents found for this application');
+        return;
+      }
+      console.log('Parsed documents object:', documents);
+      console.log('Looking for key:', documentPath);
+      console.log('Available keys:', Object.keys(documents));
 
-      // Get the actual document path
       const actualPath = documents[documentPath];
       if (!actualPath) {
-        Alert.alert('Error', 'Document not found');
+        Alert.alert('Error', `Document not found for key: ${documentPath}. Available keys: ${Object.keys(documents).join(', ')}`);
         return;
       }
 
@@ -177,13 +190,14 @@ export default function ApplicationReviewScreen({ navigation }) {
         ? actualPath 
         : `${BASE_URL}/${actualPath}`;
 
-      console.log('Opening document:', fullUrl);
-      
-      const supported = await Linking.canOpenURL(fullUrl);
-      if (supported) {
-        await Linking.openURL(fullUrl);
+      if (isImageFile(fullUrl)) {
+        setImageToView(fullUrl);
+        setImageModalVisible(true);
+        setNonImageDocUrl(null);
       } else {
-        Alert.alert('Error', 'Cannot open this document');
+        setNonImageDocUrl(fullUrl);
+        setImageToView(null);
+        setImageModalVisible(true);
       }
     } catch (error) {
       console.error('Error opening document:', error);
@@ -502,6 +516,76 @@ export default function ApplicationReviewScreen({ navigation }) {
           </View>
         </View>
       </Modal>
+
+      {/* Full-screen image or non-image modal */}
+      <Modal
+        visible={imageModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          setImageModalVisible(false);
+          setImageToView(null);
+          setNonImageDocUrl(null);
+        }}
+      >
+        <View style={styles.fullScreenModalOverlay}>
+          <View style={styles.fullScreenModalContent}>
+            <TouchableOpacity
+              style={styles.fullScreenCloseButton}
+              onPress={() => {
+                setImageModalVisible(false);
+                setImageToView(null);
+                setNonImageDocUrl(null);
+              }}
+            >
+              <Ionicons name="close" size={32} color="#fff" />
+            </TouchableOpacity>
+            {imageToView ? (
+              <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}
+                maximumZoomScale={3}
+                minimumZoomScale={1}
+                centerContent={true}
+              >
+                <Image
+                  source={{ uri: imageToView }}
+                  style={{
+                    width: Dimensions.get('window').width * 0.9,
+                    height: Dimensions.get('window').height * 0.7,
+                    resizeMode: 'contain',
+                    borderRadius: 10,
+                  }}
+                />
+              </ScrollView>
+            ) : nonImageDocUrl ? (
+              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                <Ionicons name="document-outline" size={60} color="#FFA000" />
+                <Text style={{ color: '#fff', fontSize: 18, marginVertical: 20, textAlign: 'center' }}>
+                  Preview not available for this file type.
+                </Text>
+                <TouchableOpacity
+                  style={{ backgroundColor: '#FFA000', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 20 }}
+                  onPress={async () => {
+                    try {
+                      const supported = await Linking.canOpenURL(nonImageDocUrl);
+                      if (supported) {
+                        await Linking.openURL(nonImageDocUrl);
+                      } else {
+                        Alert.alert('Error', 'Cannot open this document');
+                      }
+                    } catch (e) {
+                      Alert.alert('Error', 'Cannot open this document');
+                    }
+                  }}
+                >
+                  <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Open Externally</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -754,5 +838,27 @@ const styles = StyleSheet.create({
     marginTop: 10,
     color: '#666',
     fontSize: 14,
+  },
+  fullScreenModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullScreenModalContent: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  fullScreenCloseButton: {
+    position: 'absolute',
+    top: 40,
+    right: 30,
+    zIndex: 10,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 20,
+    padding: 6,
   },
 }); 

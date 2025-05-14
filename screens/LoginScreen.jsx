@@ -4,8 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const API_URL = 'http://192.168.254.101:3000/api';
+import { API_URL } from '../config';
 
 export default function LoginScreen({ onLogin, onLogout }) {
   const navigation = useNavigation();
@@ -26,17 +25,31 @@ export default function LoginScreen({ onLogin, onLogout }) {
     try {
       console.log('=== Login Process Started ===');
       console.log('Making login request to:', `${API_URL}/login`);
+      console.log('Request payload:', { email: username, password: '****' });
       
+      // Add timeout to the fetch request
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        console.log('Request timeout reached - aborting');
+        controller.abort();
+      }, 10000); // 10 second timeout
+
+      console.log('Sending request...');
       const response = await fetch(`${API_URL}/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
         body: JSON.stringify({
           email: username,
           password: password,
         }),
+        signal: controller.signal
       });
+
+      clearTimeout(timeoutId);
+      console.log('Response received:', response.status);
 
       const responseText = await response.text();
       console.log('Raw server response:', responseText);
@@ -106,17 +119,51 @@ export default function LoginScreen({ onLogin, onLogout }) {
       }, 100);
     } catch (error) {
       console.error('Login error:', error);
-      Alert.alert('Error', error.message || 'Something went wrong');
+      console.error('Error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
+      
+      let errorMessage = 'Something went wrong';
+      
+      if (error.name === 'AbortError') {
+        errorMessage = 'Server is not responding. Please check if the server is running and try again.';
+      } else if (error.message === 'Network request failed') {
+        errorMessage = 'Unable to connect to the server. Please check your internet connection and server address.';
+      } else if (error.message === 'Invalid server response') {
+        errorMessage = 'Received invalid response from server. Please try again.';
+      } else {
+        errorMessage = error.message || 'Something went wrong';
+      }
+      
+      Alert.alert('Error', errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleLogout = () => {
-    if (onLogout) {
-      onLogout();
-    } else {
-      navigation.goBack();
+  const handleLogout = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Clear all stored data
+      await AsyncStorage.multiRemove(['userToken', 'userData']);
+      
+      // Reset navigation state and clear the stack
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Login' }],
+      });
+
+      // Force a slight delay to ensure AsyncStorage is cleared
+      setTimeout(() => {
+        setIsLoading(false);
+      }, 100);
+    } catch (error) {
+      console.error('Error during logout:', error);
+      setIsLoading(false);
+      Alert.alert('Error', 'Failed to logout properly. Please try again.');
     }
   };
 

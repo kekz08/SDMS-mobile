@@ -13,9 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const BASE_URL = 'http://192.168.254.101:3000';
-const API_URL = `${BASE_URL}/api`;
+import { API_URL, BASE_URL } from '../config';
 
 export default function UserManagementScreen({ navigation }) {
   const [users, setUsers] = useState([]);

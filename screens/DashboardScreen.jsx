@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { 
   View, 
   Text, 
@@ -17,12 +17,11 @@ import { PieChart } from 'react-native-chart-kit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NotificationPopup from '../components/NotificationPopup';
 import NotificationBadge from '../components/NotificationBadge';
-
-const API_URL = 'http://192.168.254.101:3000/api';
-const BASE_URL = 'http://192.168.254.101:3000';
+import { API_URL, BASE_URL } from '../config';
 
 export default function DashboardScreen() {
   const navigation = useNavigation();
+  const isFocused = useIsFocused();
   const { width } = useWindowDimensions();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -39,9 +38,11 @@ export default function DashboardScreen() {
   const [showNotifications, setShowNotifications] = useState(false);
 
   useEffect(() => {
-    loadUserData();
-    fetchUserApplications();
-  }, []);
+    if (isFocused) {
+      loadUserData();
+      fetchUserApplications();
+    }
+  }, [isFocused]);
 
   const loadUserData = async () => {
     try {
@@ -52,23 +53,26 @@ export default function DashboardScreen() {
         
         if (parsedUserData.profileImage) {
           try {
-            const imageUrl = parsedUserData.profileImage.startsWith('http') 
-              ? parsedUserData.profileImage 
-              : `${BASE_URL}/${parsedUserData.profileImage}`;
+            let imageUrl = parsedUserData.profileImage;
+            if (imageUrl.includes('uploads/')) {
+              imageUrl = imageUrl.substring(imageUrl.indexOf('uploads/'));
+            }
             
-            console.log('Dashboard - Setting profile image URL:', imageUrl);
+            const fullImageUrl = `${BASE_URL}/${imageUrl}`;
+            console.log('Dashboard - Setting profile image URL:', fullImageUrl);
             
-            const response = await fetch(imageUrl);
-            if (response.ok) {
-              setProfileImage({ uri: imageUrl });
+            const imageResponse = await fetch(fullImageUrl);
+            if (imageResponse.ok) {
+              setProfileImage({ uri: fullImageUrl });
             } else {
-              setProfileImage(require('../assets/profile-placeholder.png'));
+              throw new Error(`Image not accessible: ${imageResponse.status}`);
             }
           } catch (error) {
             console.error('Error loading profile image:', error);
             setProfileImage(require('../assets/profile-placeholder.png'));
           }
         } else {
+          console.log('No profile image URL found, using default');
           setProfileImage(require('../assets/profile-placeholder.png'));
         }
       }
@@ -276,7 +280,7 @@ export default function DashboardScreen() {
               <Text style={styles.noDataText}>No applications yet</Text>
               <TouchableOpacity 
                 style={styles.applyButton}
-                onPress={() => navigation.navigate('EducationalAids')}
+                onPress={() => navigation.navigate('Educational Aids')}
               >
                 <Text style={styles.applyButtonText}>Apply for Scholarship</Text>
               </TouchableOpacity>

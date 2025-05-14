@@ -1,8 +1,9 @@
-import React, { useState, useRef } from 'react';
-import { View, Image, Text, TouchableOpacity, FlatList, ScrollView, StyleSheet, Animated, Dimensions } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Image, Text, TouchableOpacity, FlatList, ScrollView, StyleSheet, Animated, Dimensions, ActivityIndicator, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { API_URL } from '../config';
 
 const { width } = Dimensions.get('window');
 
@@ -71,8 +72,105 @@ const scholarships = [
 const ScholarshipScreen = () => {
   const navigation = useNavigation();
   const [selectedScholarship, setSelectedScholarship] = useState(null);
+  const [scholarships, setScholarships] = useState([]);
+  const [loading, setLoading] = useState(true);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(width)).current;
+
+  useEffect(() => {
+    fetchScholarships();
+  }, []);
+
+  const fetchScholarships = async () => {
+    try {
+      setLoading(true);
+      console.log('Fetching scholarships from:', API_URL);
+      
+      const response = await fetch(`${API_URL}/scholarships`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      console.log('Response status:', response.status);
+      
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error('Server response:', errorData);
+        throw new Error(`Server responded with status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('Received scholarships:', data);
+      
+      if (!Array.isArray(data)) {
+        throw new Error('Invalid data format received from server');
+      }
+      
+      // Transform the data to match the frontend structure
+      const transformedScholarships = data.map(scholarship => ({
+        id: scholarship.id.toString(),
+        title: scholarship.name,
+        description: scholarship.description.split('.')[0], // First sentence as short description
+        fullDescription: scholarship.description,
+        deadline: new Date(scholarship.deadline).toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        }),
+        benefits: scholarship.criteria ? scholarship.criteria.split('\n').filter(Boolean) : [],
+        requirements: scholarship.requirements.split('\n').filter(Boolean),
+        icon: getIconForScholarship(scholarship.name),
+        amount: scholarship.amount,
+        slots: scholarship.slots,
+        status: scholarship.status
+      }));
+
+      setScholarships(transformedScholarships);
+    } catch (error) {
+      console.error('Error fetching scholarships:', error);
+      let errorMessage = 'Failed to load scholarships. ';
+      
+      if (error.message.includes('Network request failed')) {
+        errorMessage += 'Please check your internet connection and ensure the server is running.';
+      } else if (error.message.includes('Invalid data format')) {
+        errorMessage += 'Server returned invalid data format.';
+      } else {
+        errorMessage += error.message;
+      }
+      
+      Alert.alert(
+        'Error',
+        errorMessage,
+        [
+          {
+            text: 'Retry',
+            onPress: () => fetchScholarships()
+          },
+          {
+            text: 'OK',
+            style: 'cancel'
+          }
+        ]
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getIconForScholarship = (name) => {
+    const lowerName = name.toLowerCase();
+    if (lowerName.includes('academic') || lowerName.includes('excellence')) {
+      return 'school';
+    } else if (lowerName.includes('financial') || lowerName.includes('assistance')) {
+      return 'attach-money';
+    } else if (lowerName.includes('talent') || lowerName.includes('special')) {
+      return 'stars';
+    }
+    return 'school'; // default icon
+  };
 
   const handleCardPress = (item) => {
     setSelectedScholarship(item);
@@ -236,7 +334,7 @@ const ScholarshipScreen = () => {
           <Ionicons name="menu" size={32} color="white" />
         </TouchableOpacity>
         <View style={styles.logoContainer}>
-          <Text style={styles.title}>Scholarships</Text>
+          <Text style={styles.title}>SDMS</Text>
           <Image source={require('../assets/logo.png')} style={styles.logo} />
         </View>
       </View>
@@ -244,13 +342,20 @@ const ScholarshipScreen = () => {
       {selectedScholarship ? (
         renderScholarshipDetail()
       ) : (
-        <FlatList
-          data={scholarships}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContainer}
-          renderItem={renderScholarshipItem}
-          showsVerticalScrollIndicator={false}
-        />
+        loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="white" />
+            <Text style={styles.loadingText}>Loading scholarships...</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={scholarships}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.listContainer}
+            renderItem={renderScholarshipItem}
+            showsVerticalScrollIndicator={false}
+          />
+        )
       )}
     </View>
   );
@@ -459,6 +564,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     letterSpacing: 0.5,
     marginRight: 10,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: 'white',
+    marginTop: 10,
+    fontSize: 16,
   },
 });
 

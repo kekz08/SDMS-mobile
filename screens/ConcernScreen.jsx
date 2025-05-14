@@ -17,8 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NotificationPopup from '../components/NotificationPopup';
 import NotificationBadge from '../components/NotificationBadge';
-
-const BASE_URL = 'http://192.168.254.101:3000';
+import { API_URL, BASE_URL } from '../config';
 
 export default function ConcernScreen() {
   const navigation = useNavigation();
@@ -49,7 +48,10 @@ export default function ConcernScreen() {
     try {
       const token = await AsyncStorage.getItem('userToken');
       if (!token) {
-        Alert.alert('Error', 'Please log in to view your concerns');
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Login' }],
+        });
         return;
       }
 
@@ -87,7 +89,7 @@ export default function ConcernScreen() {
       }
       setLoading(false);
     }
-  }, [submittedConcerns.length]);
+  }, [submittedConcerns.length, navigation]);
 
   useFocusEffect(
     useCallback(() => {
@@ -354,9 +356,13 @@ export default function ConcernScreen() {
               {selectedConcern.adminResponse ? (
                 <View style={styles.adminResponseDetail}>
                   <View style={styles.responseHeader}>
-                    <MaterialIcons name="admin-panel-settings" size={24} color="#FFA000" />
-                    <Text style={styles.responseHeaderText}>Admin Response</Text>
-                    <Text style={styles.responseDate}>
+                    <MaterialIcons name="admin-panel-settings" size={20} color="#FFA000" />
+                    <Text style={[styles.responseHeaderText, { flex: 1, marginRight: 6 }]}>Admin Response</Text>
+                    <Text
+                      style={styles.responseDate}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                    >
                       • {formatDate(selectedConcern.updatedAt)}
                     </Text>
                   </View>
@@ -656,6 +662,7 @@ export default function ConcernScreen() {
       flexDirection: 'row',
       alignItems: 'center',
       marginBottom: 8,
+      flexWrap: 'nowrap',
     },
     responseHeaderText: {
       fontSize: 15,
@@ -835,6 +842,21 @@ export default function ConcernScreen() {
       justifyContent: 'center',
       zIndex: 1,
     },
+    closeButton: {
+      alignSelf: 'center',
+      marginVertical: 20,
+      backgroundColor: '#FFA000',
+      paddingHorizontal: 32,
+      paddingVertical: 12,
+      borderRadius: 25,
+      elevation: 2,
+    },
+    closeButtonText: {
+      color: 'white',
+      fontWeight: 'bold',
+      fontSize: 16,
+      textAlign: 'center',
+    },
   });
 
   const renderConcernCard = useCallback((item) => (
@@ -883,8 +905,12 @@ export default function ConcernScreen() {
           <View style={styles.responsePreview}>
             <View style={styles.responseHeader}>
               <MaterialIcons name="admin-panel-settings" size={20} color="#FFA000" />
-              <Text style={styles.responseHeaderText}>Admin Response</Text>
-              <Text style={styles.responseDate}>
+              <Text style={[styles.responseHeaderText, { flex: 1, marginRight: 6 }]}>Admin Response</Text>
+              <Text
+                style={styles.responseDate}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
                 • {formatDate(item.updatedAt)}
               </Text>
             </View>

@@ -14,8 +14,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LineChart, BarChart, PieChart } from 'react-native-chart-kit';
+import { API_URL } from '../config';
 
-const API_URL = 'http://192.168.254.101:3000/api';
 const screenWidth = Dimensions.get('window').width;
 
 export default function ReportsScreen({ navigation }) {
@@ -26,25 +26,9 @@ export default function ReportsScreen({ navigation }) {
     totalScholarships: 0,
     totalApplications: 0,
     approvalRate: 0,
-    monthlyApplications: [
-      { month: 'Jan', count: 5 },
-      { month: 'Feb', count: 8 },
-      { month: 'Mar', count: 12 },
-      { month: 'Apr', count: 10 },
-      { month: 'May', count: 15 },
-      { month: 'Jun', count: 20 }
-    ],
-    scholarshipDistribution: [
-      { name: 'Merit', count: 15 },
-      { name: 'Sports', count: 8 },
-      { name: 'Academic', count: 12 },
-      { name: 'Need-Based', count: 10 }
-    ],
-    statusDistribution: [
-      { status: 'approved', count: 25 },
-      { status: 'pending', count: 15 },
-      { status: 'rejected', count: 10 }
-    ],
+    monthlyApplications: [],
+    scholarshipDistribution: [],
+    statusDistribution: [],
   });
 
   useEffect(() => {
@@ -55,21 +39,29 @@ export default function ReportsScreen({ navigation }) {
     try {
       setLoading(true);
       setError(null);
-      
       const token = await AsyncStorage.getItem('userToken');
       if (!token) {
         throw new Error('No authentication token found');
       }
-
-      // For now, we'll use static data instead of fetching from API
-      setStats(prevStats => ({
-        ...prevStats,
-        totalUsers: 150,
-        totalScholarships: 4,
-        totalApplications: 45,
-        approvalRate: 55,
-      }));
-
+      const response = await fetch(`${API_URL}/admin/reports`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+        },
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch reports');
+      }
+      const data = await response.json();
+      setStats({
+        totalUsers: data.totalUsers || 0,
+        totalScholarships: data.totalScholarships || 0,
+        totalApplications: data.totalApplications || 0,
+        approvalRate: data.approvalRate || 0,
+        monthlyApplications: data.monthlyApplications || [],
+        scholarshipDistribution: data.scholarshipDistribution || [],
+        statusDistribution: data.statusDistribution || [],
+      });
       setError(null);
     } catch (error) {
       console.error('Error fetching report data:', error);
@@ -78,14 +70,8 @@ export default function ReportsScreen({ navigation }) {
         'Error',
         `Failed to load reports: ${error.message}`,
         [
-          { 
-            text: 'Retry', 
-            onPress: () => fetchReportData() 
-          },
-          {
-            text: 'OK',
-            style: 'cancel'
-          }
+          { text: 'Retry', onPress: () => fetchReportData() },
+          { text: 'OK', style: 'cancel' },
         ]
       );
     } finally {
@@ -155,7 +141,7 @@ export default function ReportsScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
         <View style={styles.statsGrid}>
           <StatCard
             title="Total Users"
@@ -185,38 +171,59 @@ export default function ReportsScreen({ navigation }) {
 
         <View style={styles.chartContainer}>
           <Text style={styles.sectionTitle}>Monthly Applications</Text>
-          <LineChart
-            data={{
-              labels: stats.monthlyApplications.map(item => item.month),
-              datasets: [{
-                data: stats.monthlyApplications.map(item => item.count)
-              }]
-            }}
-            width={screenWidth - 40}
-            height={220}
-            chartConfig={{
-              backgroundColor: 'transparent',
-              backgroundGradientFrom: 'rgba(255, 255, 255, 0.1)',
-              backgroundGradientTo: 'rgba(255, 255, 255, 0.2)',
-              decimalPlaces: 0,
-              color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-              labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-              style: {
-                borderRadius: 16
-              },
-              propsForDots: {
-                r: "6",
-                strokeWidth: "2",
-                stroke: "#FFA000"
-              },
-              propsForLabels: {
-                fontSize: 12,
-                fontWeight: 'bold'
-              }
-            }}
-            bezier
-            style={styles.chart}
-          />
+          {stats.monthlyApplications.length === 0 ? (
+            <Text style={styles.noDataText}>No data available for monthly applications.</Text>
+          ) : (
+            <LineChart
+              data={{
+                labels: stats.monthlyApplications.map(item => item.month),
+                datasets: [{
+                  data: stats.monthlyApplications.map(item => item.count)
+                }]
+              }}
+              width={screenWidth - 40 - 16}
+              height={260}
+              chartConfig={{
+                backgroundColor: 'transparent',
+                backgroundGradientFrom: 'transparent',
+                backgroundGradientTo: 'transparent',
+                decimalPlaces: 0,
+                color: (opacity = 1) => `rgba(255, 200, 0, ${opacity})`,
+                labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+                style: {
+                },
+                propsForDots: {
+                  r: "6",
+                  strokeWidth: "3",
+                  stroke: "#FFA000",
+                  fill: '#FFF',
+                },
+                propsForBackgroundLines: {
+                  stroke: '#444',
+                  strokeDasharray: '',
+                },
+                propsForLabels: {
+                  fontSize: 13,
+                  fontWeight: 'bold',
+                },
+                propsForHorizontalLabels: {
+                  fontSize: 13,
+                  fontWeight: 'bold',
+                },
+                propsForVerticalLabels: {
+                  fontSize: 13,
+                  fontWeight: 'bold',
+                },
+                fillShadowGradient: '#FFA000',
+                fillShadowGradientOpacity: 0.15,
+              }}
+              bezier
+              style={{ marginVertical: 8, backgroundColor: 'transparent' }}
+              withInnerLines={true}
+              withOuterLines={true}
+              withShadow={true}
+            />
+          )}
         </View>
 
         <View style={styles.chartContainer}>
@@ -228,21 +235,19 @@ export default function ReportsScreen({ navigation }) {
                 data: stats.scholarshipDistribution.map(item => item.count)
               }]
             }}
-            width={screenWidth - 40}
+            width={screenWidth - 40 - 16}
             height={220}
             chartConfig={{
               backgroundColor: 'transparent',
-              backgroundGradientFrom: 'rgba(255, 255, 255, 0.1)',
-              backgroundGradientTo: 'rgba(255, 255, 255, 0.2)',
+              backgroundGradientFrom: 'transparent',
+              backgroundGradientTo: 'transparent',
               decimalPlaces: 0,
               color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
               labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-              style: {
-                borderRadius: 16
-              },
+              style: {},
               barPercentage: 0.7
             }}
-            style={styles.chart}
+            style={{ marginVertical: 8, backgroundColor: 'transparent' }}
             verticalLabelRotation={30}
             showValuesOnTopOfBars={true}
             fromZero={true}
@@ -381,7 +386,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     borderRadius: 15,
     padding: 20,
-    marginBottom: 20,
+    paddingHorizontal: 16,
+    marginBottom: 32,
     elevation: 5,
     shadowColor: '#000',
     shadowOffset: {
@@ -418,7 +424,6 @@ const styles = StyleSheet.create({
     textShadowRadius: 10
   },
   chart: {
-    borderRadius: 15,
     marginVertical: 8,
     elevation: 3,
   },
@@ -462,5 +467,12 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  noDataText: {
+    color: '#FFF',
+    textAlign: 'center',
+    fontSize: 16,
+    marginVertical: 30,
+    opacity: 0.7,
   },
 }); 

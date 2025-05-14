@@ -8,10 +8,7 @@ import * as ImagePicker from 'expo-image-picker';
 import NetInfo from '@react-native-community/netinfo';
 import NotificationPopup from '../components/NotificationPopup';
 import NotificationBadge from '../components/NotificationBadge';
-
-// Use your local IP address for all platforms
-const API_URL = 'http://192.168.254.101:3000/api';
-const BASE_URL = 'http://192.168.254.101:3000';
+import { API_URL, BASE_URL } from '../config';
 
 // Add a function to test server connectivity
 const testServerConnectivity = async (token) => {

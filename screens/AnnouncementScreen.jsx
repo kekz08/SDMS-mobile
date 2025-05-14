@@ -17,7 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NotificationPopup from '../components/NotificationPopup';
 import NotificationBadge from '../components/NotificationBadge';
-import { API_URL } from '../app/config';
+import { API_URL } from '../config';
 
 export default function AnnouncementScreen({ navigation }) {
   const [announcements, setAnnouncements] = useState([]);

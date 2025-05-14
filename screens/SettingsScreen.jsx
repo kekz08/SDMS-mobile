@@ -13,8 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const API_URL = 'http://192.168.254.101:3000/api';
+import { API_URL } from '../config';
 
 export default function SettingsScreen({ navigation }) {
   const [loading, setLoading] = useState(true);

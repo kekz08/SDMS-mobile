@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, RefreshControl, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const API_URL = 'http://192.168.254.101:3000/api';
+import { API_URL } from '../config';
 
 const NotificationPopup = ({ visible, onClose }) => {
   const [notifications, setNotifications] = useState([]);
@@ -13,13 +12,21 @@ const NotificationPopup = ({ visible, onClose }) => {
   useEffect(() => {
     if (visible) {
       fetchNotifications();
+    } else {
+      // Clear notifications when popup is closed
+      setNotifications([]);
+      setLoading(false);
+      setRefreshing(false);
     }
   }, [visible]);
 
   const fetchNotifications = async () => {
     try {
       const token = await AsyncStorage.getItem('userToken');
-      if (!token) return;
+      if (!token) {
+        onClose();
+        return;
+      }
 
       const response = await fetch(`${API_URL}/notifications`, {
         headers: {
@@ -29,6 +36,12 @@ const NotificationPopup = ({ visible, onClose }) => {
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          // Token is invalid or expired
+          await AsyncStorage.multiRemove(['userToken', 'userData']);
+          onClose();
+          return;
+        }
         throw new Error('Failed to fetch notifications');
       }
 
@@ -36,10 +49,16 @@ const NotificationPopup = ({ visible, onClose }) => {
       setNotifications(data);
     } catch (error) {
       console.error('Error fetching notifications:', error);
+      onClose();
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchNotifications();
   };
 
   const markAsRead = async (notificationId) => {
@@ -83,97 +102,113 @@ const NotificationPopup = ({ visible, onClose }) => {
     return date.toLocaleDateString();
   };
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchNotifications();
-  };
-
-  if (!visible) return null;
-
   return (
-    <View style={styles.container}>
-      <View style={styles.popup}>
-        <View style={styles.header}>
-          <Text style={styles.headerText}>Notifications</Text>
-          <TouchableOpacity onPress={onClose}>
-            <Ionicons name="close" size={24} color="white" />
-          </TouchableOpacity>
-        </View>
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#FFA000" />
-          </View>
-        ) : (
-          <ScrollView 
-            style={styles.notificationList}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                colors={["#FFA000"]}
-                tintColor="#FFA000"
-              />
-            }
-          >
-            {notifications.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <Ionicons name="notifications-off-outline" size={40} color="rgba(255, 255, 255, 0.5)" />
-                <Text style={styles.emptyText}>No notifications yet</Text>
+    <Modal
+      visible={visible}
+      transparent={true}
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <TouchableOpacity 
+        style={styles.modalOverlay} 
+        activeOpacity={1} 
+        onPress={onClose}
+      >
+        <TouchableOpacity 
+          activeOpacity={1} 
+          style={styles.popupContainer}
+          onPress={(e) => e.stopPropagation()}
+        >
+          <View style={styles.popup}>
+            <View style={styles.header}>
+              <Text style={styles.headerText}>Notifications</Text>
+              <TouchableOpacity onPress={onClose}>
+                <Ionicons name="close" size={24} color="white" />
+              </TouchableOpacity>
+            </View>
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#FFA000" />
               </View>
             ) : (
-              notifications.map((notification) => (
-                <TouchableOpacity
-                  key={notification.id}
-                  style={[
-                    styles.notificationItem,
-                    !notification.isRead && styles.unreadItem
-                  ]}
-                  onPress={() => markAsRead(notification.id)}
-                >
-                  <View style={styles.notificationIcon}>
-                    <Ionicons 
-                      name={
-                        notification.type === 'success' ? 'checkmark-circle' :
-                        notification.type === 'error' ? 'alert-circle' :
-                        'information-circle'
-                      }
-                      size={24} 
-                      color={
-                        notification.type === 'success' ? '#4CAF50' :
-                        notification.type === 'error' ? '#F44336' :
-                        '#FFA000'
-                      }
-                    />
+              <ScrollView 
+                style={styles.notificationList}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={onRefresh}
+                    colors={["#FFA000"]}
+                    tintColor="#FFA000"
+                  />
+                }
+              >
+                {notifications.length === 0 ? (
+                  <View style={styles.emptyContainer}>
+                    <Ionicons name="notifications-off-outline" size={40} color="rgba(255, 255, 255, 0.5)" />
+                    <Text style={styles.emptyText}>No notifications yet</Text>
                   </View>
-                  <View style={styles.notificationContent}>
-                    <Text style={styles.notificationTitle}>{notification.title}</Text>
-                    <Text style={styles.notificationMessage}>{notification.message}</Text>
-                    <Text style={styles.notificationTime}>
-                      {formatTimestamp(notification.createdAt)}
-                    </Text>
-                  </View>
-                  {!notification.isRead && (
-                    <View style={styles.unreadDot} />
-                  )}
-                </TouchableOpacity>
-              ))
+                ) : (
+                  notifications.map((notification) => (
+                    <TouchableOpacity
+                      key={notification.id}
+                      style={[
+                        styles.notificationItem,
+                        !notification.isRead && styles.unreadItem
+                      ]}
+                      onPress={() => markAsRead(notification.id)}
+                    >
+                      <View style={styles.notificationIcon}>
+                        <Ionicons 
+                          name={
+                            notification.type === 'success' ? 'checkmark-circle' :
+                            notification.type === 'error' ? 'alert-circle' :
+                            'information-circle'
+                          }
+                          size={24} 
+                          color={
+                            notification.type === 'success' ? '#4CAF50' :
+                            notification.type === 'error' ? '#F44336' :
+                            '#FFA000'
+                          }
+                        />
+                      </View>
+                      <View style={styles.notificationContent}>
+                        <Text style={styles.notificationTitle}>{notification.title}</Text>
+                        <Text style={styles.notificationMessage}>{notification.message}</Text>
+                        <Text style={styles.notificationTime}>
+                          {formatTimestamp(notification.createdAt)}
+                        </Text>
+                      </View>
+                      {!notification.isRead && (
+                        <View style={styles.unreadDot} />
+                      )}
+                    </TouchableOpacity>
+                  ))
+                )}
+              </ScrollView>
             )}
-          </ScrollView>
-        )}
-      </View>
-    </View>
+          </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    position: 'absolute',
-    top: 70,
-    right: 20,
-    zIndex: 1000,
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+    paddingTop: 70,
+    paddingRight: 20,
+  },
+  popupContainer: {
+    width: 300,
+    maxHeight: 400,
   },
   popup: {
-    width: 300,
+    width: '100%',
     maxHeight: 400,
     backgroundColor: 'rgba(0, 85, 0, 0.95)',
     borderRadius: 10,

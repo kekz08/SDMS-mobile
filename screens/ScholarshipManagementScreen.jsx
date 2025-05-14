@@ -17,8 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
-
-const API_URL = 'http://192.168.254.101:3000/api';
+import { API_URL } from '../config';
 
 export default function ScholarshipManagementScreen({ navigation }) {
   const [scholarships, setScholarships] = useState([]);

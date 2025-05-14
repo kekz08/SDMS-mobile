@@ -9,6 +9,9 @@ const fs = require('fs');
 const { authenticateToken, isAdmin } = require('./middleware/auth');
 require('dotenv').config();
 
+// Import config
+const config = require('../config').default;
+
 const app = express();
 
 // Configure multer for profile pictures
@@ -172,10 +175,9 @@ app.post('/api/login', async (req, res) => {
     // Convert file path to full URL if profileImage exists
     let profileImageUrl = user.profileImage;
     if (profileImageUrl) {
-      const baseUrl = `http://${process.env.HOST || '192.168.254.101'}:${process.env.PORT || 3000}`;
       profileImageUrl = profileImageUrl.startsWith('http') 
         ? profileImageUrl 
-        : `${baseUrl}/${profileImageUrl}`;
+        : `${config.BASE_URL}/${profileImageUrl}`;
     }
 
     // Prepare response data with explicit field handling
@@ -397,13 +399,12 @@ app.get('/api/admin/users', authenticateToken, isAdmin, async (req, res) => {
     `);
 
     // Convert file paths to full URLs for profile images
-    const baseUrl = `http://${process.env.HOST || '192.168.254.101'}:${process.env.PORT || 3000}`;
     const usersWithFullUrls = users.map(user => ({
       ...user,
       profileImage: user.profileImage 
         ? (user.profileImage.startsWith('http') 
           ? user.profileImage 
-          : `${baseUrl}/${user.profileImage}`)
+          : `${config.BASE_URL}/${user.profileImage}`)
         : null
     }));
 
@@ -539,16 +540,21 @@ app.post('/api/users/profile-picture', authenticateToken, uploadProfile.single('
     }
 
     // Convert file path to full URL
-    const baseUrl = `http://${process.env.HOST || '192.168.254.101'}:${process.env.PORT || 3000}`;
-    const user = {
+    const profileImageUrl = updatedUser[0].profileImage.startsWith('http') 
+      ? updatedUser[0].profileImage 
+      : `${config.BASE_URL}/${updatedUser[0].profileImage}`;
+
+    const responseData = {
       ...updatedUser[0],
-      profileImage: `${baseUrl}/${updatedUser[0].profileImage}`
+      profileImage: profileImageUrl,
+      contactNumber: updatedUser[0].contactNumber || '',
+      address: updatedUser[0].address || ''
     };
 
     console.log('Profile picture update successful');
     res.json({ 
       message: 'Profile picture updated successfully',
-      user: user
+      user: responseData
     });
   } catch (error) {
     console.error('Error uploading profile picture:', error);
@@ -675,10 +681,9 @@ app.put(['/api/users/profile', '/api/users/profile/'], authenticateToken, async 
     // Convert file path to full URL if profileImage exists
     let profileImageUrl = updatedUser[0].profileImage;
     if (profileImageUrl) {
-      const baseUrl = `http://${process.env.HOST || '192.168.254.101'}:${process.env.PORT || 3000}`;
       profileImageUrl = profileImageUrl.startsWith('http') 
         ? profileImageUrl 
-        : `${baseUrl}/${profileImageUrl}`;
+        : `${config.BASE_URL}/${profileImageUrl}`;
     }
 
     const responseData = {
@@ -1198,22 +1203,19 @@ app.get('/api/admin/applications', authenticateToken, isAdmin, async (req, res) 
 
     // Parse the documents JSON for each application
     const applicationsWithDocs = applications.map(app => {
-      let documents = [];
+      let documents = {};
       if (app.documents) {
-        try {
-          const docsObj = JSON.parse(app.documents);
-          documents = Object.entries(docsObj).map(([type, path]) => ({
-            id: `${app.id}-${type}`,
-            name: type,
-            path: path,
-            type: type,
-            createdAt: app.createdAt
-          }));
-        } catch (err) {
-          console.error(`Error parsing documents JSON for application ${app.id}:`, err);
+        if (typeof app.documents === 'string') {
+          try {
+            documents = JSON.parse(app.documents);
+          } catch (err) {
+            console.error(`Error parsing documents JSON for application ${app.id}:`, err);
+            documents = {};
+          }
+        } else if (typeof app.documents === 'object') {
+          documents = app.documents;
         }
       }
-      
       return {
         ...app,
         documents: documents
@@ -1519,13 +1521,17 @@ app.post('/api/applications', authenticateToken, uploadDocuments.fields([
     }
 
     // Prepare documents object with file paths
-    const documents = {
-      reportCard: req.files.reportCard[0].path.replace(path.join(__dirname, '/'), '').replace(/\\/g, '/'),
-      brgyClearance: req.files.brgyClearance[0].path.replace(path.join(__dirname, '/'), '').replace(/\\/g, '/'),
-      incomeCertificate: req.files.incomeCertificate[0].path.replace(path.join(__dirname, '/'), '').replace(/\\/g, '/')
+    const makeRelative = (absPath) => {
+      const idx = absPath.replace(/\\/g, '/').indexOf('uploads/');
+      return idx !== -1 ? absPath.replace(/\\/g, '/').substring(idx) : absPath.replace(/\\/g, '/');
     };
 
-    console.log('Saving documents:', documents);
+    const documents = {
+      reportCard: req.files.reportCard?.[0] ? makeRelative(req.files.reportCard[0].path) : null,
+      brgyClearance: req.files.brgyClearance?.[0] ? makeRelative(req.files.brgyClearance[0].path) : null,
+      incomeCertificate: req.files.incomeCertificate?.[0] ? makeRelative(req.files.incomeCertificate[0].path) : null
+    };
+    console.log('Will save documents as:', documents);
 
     // Insert application
     const [result] = await db.execute(
@@ -1612,9 +1618,30 @@ app.get('/api/user/applications', authenticateToken, async (req, res) => {
     console.log('Final counts:', counts);
     console.log('Sending response...');
 
+    // Parse the documents JSON for each application
+    const applicationsWithDocs = applications.map(app => {
+      let documents = {};
+      if (app.documents) {
+        if (typeof app.documents === 'string') {
+          try {
+            documents = JSON.parse(app.documents);
+          } catch (err) {
+            console.error(`Error parsing documents JSON for application ${app.id}:`, err);
+            documents = {};
+          }
+        } else if (typeof app.documents === 'object') {
+          documents = app.documents;
+        }
+      }
+      return {
+        ...app,
+        documents: documents
+      };
+    });
+
     res.json({
       statusCounts: counts,
-      applications: applications
+      applications: applicationsWithDocs
     });
   } catch (error) {
     console.error('Error details:', {
@@ -2132,14 +2159,19 @@ app.get('/api/admin/concerns', authenticateToken, isAdmin, async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 3000;
-const HOST = '192.168.254.101'; // Use your local IP address
+const PORT = config.PORT || 3000;
+const HOST = '0.0.0.0';  // Force binding to all interfaces
+
+console.log('\n=== Server Configuration ===');
+console.log('Port:', PORT);
+console.log('Host:', HOST);
+console.log('API URL:', config.API_URL);
 
 app.listen(PORT, HOST, () => {
   console.log(`\n=== Server Started ===`);
   console.log(`Server running on port ${PORT}`);
   console.log(`Server bound to ${HOST}`);
-  console.log(`API URL: http://${HOST}:${PORT}/api`);
+  console.log(`API URL: ${config.API_URL}`);
   console.log('\nRegistered Routes:');
   const routes = app._router.stack
     .filter(r => r.route)

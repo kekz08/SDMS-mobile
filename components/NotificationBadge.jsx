@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const API_URL = 'http://192.168.254.101:3000/api';
+import { API_URL } from '../config';
 
 const NotificationBadge = () => {
   const [unreadCount, setUnreadCount] = useState(0);

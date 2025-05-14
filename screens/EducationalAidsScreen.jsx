@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { View, Text, Image, TouchableOpacity, StyleSheet, ScrollView, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -9,11 +9,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import NotificationPopup from '../components/NotificationPopup';
 import NotificationBadge from '../components/NotificationBadge';
 import { format } from 'date-fns';
-
-const BASE_URL = 'http://192.168.254.101:3000';
+import { API_URL, BASE_URL } from '../config';
 
 export default function EducationalAidsScreen({ route }) {
   const navigation = useNavigation();
+  const isFocused = useIsFocused();
   const [activeTab, setActiveTab] = useState('available');
   const [currentStep, setCurrentStep] = useState(0); // Step 0 is scholarship selection
   const [date, setDate] = useState(new Date());
@@ -204,8 +204,10 @@ export default function EducationalAidsScreen({ route }) {
       await fetchScholarships();
       await checkReapplicationData();
     };
-    initializeScreen();
-  }, [loadUserData]);
+    if (isFocused) {
+      initializeScreen();
+    }
+  }, [isFocused, loadUserData]);
 
   // Form state
   const [formData, setFormData] = useState({

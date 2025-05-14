@@ -6,9 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NotificationPopup from '../components/NotificationPopup';
 import NotificationBadge from '../components/NotificationBadge';
-
-const BASE_URL = 'http://192.168.254.101:3000';
-const API_URL = 'http://192.168.254.101:3000/api';
+import { API_URL, BASE_URL } from '../config';
 
 export default function ApplicationStatusScreen() {
   const navigation = useNavigation();
