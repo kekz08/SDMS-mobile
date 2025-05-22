@@ -227,14 +227,13 @@ export default function ScholarshipManagementScreen({ navigation }) {
         <Text style={styles.scholarshipName}>{item.name}</Text>
         <View style={[
           styles.statusBadge,
-          { backgroundColor: item.status === 'active' ? '#4CAF50' : '#FFA000' }
+          { backgroundColor: item.status === 'active' ? '#e3f6e8' : '#fff7e3', borderColor: item.status === 'active' ? '#43a047' : '#ffa000' }
         ]}>
-          <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
+          <Ionicons name={item.status === 'active' ? 'checkmark-circle' : 'time'} size={15} color={item.status === 'active' ? '#43a047' : '#ffa000'} />
+          <Text style={[styles.statusText, { color: item.status === 'active' ? '#388e3c' : '#ffa000' }]}>{item.status.toUpperCase()}</Text>
         </View>
       </View>
-
       <Text style={styles.scholarshipDescription}>{item.description}</Text>
-      
       <View style={styles.scholarshipDetails}>
         <View style={styles.detailItem}>
           <Ionicons name="calendar-outline" size={16} color="#666" />
@@ -249,17 +248,17 @@ export default function ScholarshipManagementScreen({ navigation }) {
           <Text style={styles.detailText}>Amount: ₱{item.amount.toLocaleString()}</Text>
         </View>
       </View>
-
+      <View style={styles.divider} />
       <View style={styles.actionButtons}>
         <TouchableOpacity 
-          style={[styles.actionButton, { backgroundColor: '#2196F3' }]}
+          style={[styles.actionButton, { backgroundColor: '#e3ecfa', borderColor: '#1976d2' }]}
           onPress={() => handleEditScholarship(item)}
+          activeOpacity={0.8}
         >
-          <Ionicons name="create-outline" size={20} color="white" />
-          <Text style={styles.actionButtonText}>Edit</Text>
+          <Ionicons name="create-outline" size={22} color="#1976d2" />
         </TouchableOpacity>
         <TouchableOpacity 
-          style={[styles.actionButton, { backgroundColor: '#F44336' }]}
+          style={[styles.actionButton, { backgroundColor: '#fae3e3', borderColor: '#e53935' }]}
           onPress={() => {
             Alert.alert(
               'Delete Scholarship',
@@ -274,9 +273,9 @@ export default function ScholarshipManagementScreen({ navigation }) {
               ]
             );
           }}
+          activeOpacity={0.8}
         >
-          <Ionicons name="trash-outline" size={20} color="white" />
-          <Text style={styles.actionButtonText}>Delete</Text>
+          <Ionicons name="trash-outline" size={22} color="#e53935" />
         </TouchableOpacity>
       </View>
     </View>
@@ -500,10 +499,17 @@ const styles = StyleSheet.create({
     padding: 15,
   },
   scholarshipCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 15,
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 22,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.10,
+    shadowRadius: 12,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: '#f2f2f2',
   },
   scholarshipHeader: {
     flexDirection: 'row',
@@ -511,22 +517,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 10,
   },
-  scholarshipName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    flex: 1,
-  },
+  scholarshipName: { fontSize: 20, fontWeight: '700', color: '#222', flex: 1 },
   statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderWidth: 1.5,
+    marginLeft: 8,
   },
-  statusText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
+  statusText: { fontWeight: 'bold', fontSize: 13, marginLeft: 5 },
   scholarshipDescription: {
     fontSize: 14,
     color: '#666',
@@ -544,21 +545,22 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     color: '#666',
   },
-  actionButtons: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 10,
+  divider: {
+    width: '100%',
+    height: 1,
+    backgroundColor: '#f2f2f2',
+    marginVertical: 14,
+    borderRadius: 1,
   },
+  actionButtons: { flexDirection: 'row', gap: 12, justifyContent: 'flex-end' },
   actionButton: {
-    flexDirection: 'row',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
     alignItems: 'center',
-    padding: 8,
-    borderRadius: 5,
-    gap: 5,
-  },
-  actionButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
+    borderWidth: 1.5,
+    marginLeft: 8,
   },
   modalContainer: {
     flex: 1,

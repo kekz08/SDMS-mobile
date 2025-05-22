@@ -279,10 +279,22 @@ export default function DashboardScreen() {
               <Ionicons name="document-text-outline" size={50} color="rgba(255, 255, 255, 0.5)" />
               <Text style={styles.noDataText}>No applications yet</Text>
               <TouchableOpacity 
-                style={styles.applyButton}
-                onPress={() => navigation.navigate('Educational Aids')}
+                style={[styles.applyButton, !userData?.isVerified && styles.disabledButton]}
+                onPress={() => {
+                  if (userData?.isVerified) {
+                    navigation.navigate('Educational Aids');
+                  } else {
+                    Alert.alert(
+                      'Verification Required',
+                      'Your account must be verified before you can apply for scholarships. Please wait for admin approval.'
+                    );
+                  }
+                }}
+                disabled={!userData?.isVerified}
               >
-                <Text style={styles.applyButtonText}>Apply for Scholarship</Text>
+                <Text style={styles.applyButtonText}>
+                  {userData?.isVerified ? 'Apply for Scholarship' : 'Verification Required'}
+                </Text>
               </TouchableOpacity>
             </View>
           )}
@@ -467,5 +479,8 @@ const styles = StyleSheet.create({
   applyButtonText: {
     color: 'white',
     fontWeight: 'bold',
+  },
+  disabledButton: {
+    backgroundColor: 'rgba(76, 175, 80, 0.4)',
   },
 });

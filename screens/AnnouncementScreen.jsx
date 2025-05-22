@@ -229,28 +229,28 @@ export default function AnnouncementScreen({ navigation }) {
 
   const renderAnnouncementCard = ({ item }) => (
     <View style={styles.announcementCard}>
-      <View style={styles.announcementHeader}>
+      <View style={styles.cardHeaderRow}>
         <Text style={styles.announcementTitle}>{item.title}</Text>
         <View style={[
           styles.priorityBadge,
-          { backgroundColor: item.priority === 'high' ? '#F44336' : item.priority === 'normal' ? '#4CAF50' : '#FFA000' }
+          { backgroundColor: item.priority === 'high' ? '#fae3e3' : item.priority === 'normal' ? '#e3f6e8' : '#fff7e3', borderColor: item.priority === 'high' ? '#e53935' : item.priority === 'normal' ? '#43a047' : '#ffa000' }
         ]}>
-          <Text style={styles.priorityText}>{item.priority.toUpperCase()}</Text>
+          <Ionicons name={item.priority === 'high' ? 'alert-circle' : item.priority === 'normal' ? 'checkmark-circle' : 'time'} size={16} color={item.priority === 'high' ? '#e53935' : item.priority === 'normal' ? '#43a047' : '#ffa000'} />
+          <Text style={[styles.priorityText, { color: item.priority === 'high' ? '#e53935' : item.priority === 'normal' ? '#388e3c' : '#ffa000' }]}>{item.priority.toUpperCase()}</Text>
         </View>
       </View>
-
+      <View style={styles.divider} />
       <Text style={styles.announcementContent}>{item.content}</Text>
-
-      <View style={styles.actionButtons}>
+      <View style={styles.cardActions}>
         <TouchableOpacity 
-          style={[styles.actionButton, { backgroundColor: '#2196F3' }]}
+          style={[styles.actionButton, styles.editButton]}
           onPress={() => handleEditAnnouncement(item)}
+          activeOpacity={0.8}
         >
-          <Ionicons name="create-outline" size={20} color="white" />
-          <Text style={styles.actionButtonText}>Edit</Text>
+          <Ionicons name="create-outline" size={22} color="#1976d2" />
         </TouchableOpacity>
         <TouchableOpacity 
-          style={[styles.actionButton, { backgroundColor: '#F44336' }]}
+          style={[styles.actionButton, styles.deleteButton]}
           onPress={() => {
             Alert.alert(
               'Delete Announcement',
@@ -265,9 +265,9 @@ export default function AnnouncementScreen({ navigation }) {
               ]
             );
           }}
+          activeOpacity={0.8}
         >
-          <Ionicons name="trash-outline" size={20} color="white" />
-          <Text style={styles.actionButtonText}>Delete</Text>
+          <Ionicons name="trash-outline" size={22} color="#e53935" />
         </TouchableOpacity>
       </View>
     </View>
@@ -490,16 +490,23 @@ const styles = StyleSheet.create({
     padding: 15,
   },
   announcementCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 15,
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 22,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.10,
+    shadowRadius: 12,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: '#f2f2f2',
   },
-  announcementHeader: {
+  cardHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   announcementTitle: {
     fontSize: 18,
@@ -508,35 +515,49 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   priorityBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderWidth: 1.5,
+    marginLeft: 8,
   },
-  priorityText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: 'bold',
+  priorityText: { fontWeight: 'bold', fontSize: 13, marginLeft: 5 },
+  divider: {
+    width: '100%',
+    height: 1,
+    backgroundColor: '#f2f2f2',
+    marginVertical: 14,
+    borderRadius: 1,
   },
   announcementContent: {
     fontSize: 14,
     color: '#666',
     marginBottom: 15,
   },
-  actionButtons: {
+  cardActions: {
     flexDirection: 'row',
+    gap: 12,
     justifyContent: 'flex-end',
-    gap: 10,
+    marginTop: 8,
   },
   actionButton: {
-    flexDirection: 'row',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
     alignItems: 'center',
-    padding: 8,
-    borderRadius: 5,
-    gap: 5,
+    borderWidth: 1.5,
+    marginLeft: 8,
   },
-  actionButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
+  editButton: {
+    backgroundColor: '#e3ecfa',
+    borderColor: '#1976d2',
+  },
+  deleteButton: {
+    backgroundColor: '#fae3e3',
+    borderColor: '#e53935',
   },
   modalContainer: {
     flex: 1,

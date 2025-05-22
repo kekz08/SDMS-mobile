@@ -30,18 +30,22 @@ export default function AdminDashboardScreen() {
   const [notificationCount, setNotificationCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [pendingUsers, setPendingUsers] = useState([]);
+  const [loadingPendingUsers, setLoadingPendingUsers] = useState(true);
 
   // Sample data - replace with actual API calls
   const [stats, setStats] = useState({
     totalUsers: 0,
     activeScholarships: 0,
     pendingApplications: 0,
-    approvedApplications: 0
+    approvedApplications: 0,
+    pendingVerifications: 0
   });
 
   useEffect(() => {
     loadUserData();
     fetchAdminData();
+    fetchPendingUsers();
 
     // Set up notification refresh interval
     const notificationInterval = setInterval(() => {
@@ -102,6 +106,7 @@ export default function AdminDashboardScreen() {
         throw new Error('No authentication token found');
       }
 
+      console.log('Fetching admin stats...');
       const response = await fetch(`${API_URL}/admin/stats`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -114,11 +119,22 @@ export default function AdminDashboardScreen() {
       }
 
       const data = await response.json();
+      console.log('Admin stats received:', data);
+
       setStats({
         totalUsers: data.totalUsers,
         activeScholarships: data.activeScholarships,
         pendingApplications: data.pendingApplications,
-        approvedApplications: data.approvedApplications
+        approvedApplications: data.approvedApplications,
+        pendingVerifications: data.pendingVerifications || 0 // Ensure we have a default value
+      });
+
+      console.log('Updated stats state:', {
+        totalUsers: data.totalUsers,
+        activeScholarships: data.activeScholarships,
+        pendingApplications: data.pendingApplications,
+        approvedApplications: data.approvedApplications,
+        pendingVerifications: data.pendingVerifications || 0
       });
     } catch (error) {
       console.error('Error fetching admin data:', error);
@@ -132,6 +148,129 @@ export default function AdminDashboardScreen() {
       setLoading(false);
     }
   };
+
+  const fetchPendingUsers = async () => {
+    try {
+      setLoadingPendingUsers(true);
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      console.log('Fetching pending users...');
+      const response = await fetch(`${API_URL}/admin/users`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch pending users');
+      }
+
+      const users = await response.json();
+      console.log('All users:', users); // Debug log
+
+      // Filter out admin users and already verified users
+      const pending = users.filter(user => {
+        console.log('Checking user:', {
+          id: user.id,
+          role: user.role,
+          isVerified: user.isVerified,
+          firstName: user.firstName,
+          lastName: user.lastName
+        });
+        return user.role !== 'admin' && user.isVerified === false;
+      });
+      
+      console.log('Filtered pending users:', pending); // Debug log
+      setPendingUsers(pending);
+      
+      // Remove the local count update since we're using the server's count
+      // setStats(prev => ({
+      //   ...prev,
+      //   pendingVerifications: pending.length
+      // }));
+    } catch (error) {
+      console.error('Error fetching pending users:', error);
+      Alert.alert('Error', 'Failed to load pending users');
+    } finally {
+      setLoadingPendingUsers(false);
+    }
+  };
+
+  const verifyUser = async (userId) => {
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      const response = await fetch(`${API_URL}/admin/users/${userId}/verify`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({})
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to verify user');
+      }
+
+      // Remove the verified user from the pending list immediately
+      setPendingUsers(prev => prev.filter(user => user.id !== userId));
+      
+      // Update the pending verifications count
+      setStats(prev => ({
+        ...prev,
+        pendingVerifications: prev.pendingVerifications - 1
+      }));
+
+      // Refresh admin stats
+      fetchAdminData();
+      
+      Alert.alert('Success', 'User verified successfully');
+    } catch (error) {
+      console.error('Error verifying user:', error);
+      Alert.alert('Error', error.message || 'Failed to verify user');
+    }
+  };
+
+  const renderPendingUserCard = ({ item }) => (
+    <View style={styles.pendingUserCard}>
+      <View style={styles.pendingUserInfo}>
+        <Text style={styles.pendingUserName}>{item.firstName} {item.lastName}</Text>
+        <Text style={styles.pendingUserEmail}>{item.email}</Text>
+        {item.studentId && (
+          <Text style={styles.pendingUserStudentId}>ID: {item.studentId}</Text>
+        )}
+      </View>
+      <TouchableOpacity 
+        style={styles.verifyButton}
+        onPress={() => {
+          Alert.alert(
+            'Verify User',
+            `Are you sure you want to verify ${item.firstName} ${item.lastName}?`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { 
+                text: 'Verify', 
+                onPress: () => verifyUser(item.id)
+              }
+            ]
+          );
+        }}
+      >
+        <Ionicons name="checkmark-circle-outline" size={24} color="white" />
+        <Text style={styles.verifyButtonText}>Verify</Text>
+      </TouchableOpacity>
+    </View>
+  );
 
   return (
     <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
@@ -258,7 +397,41 @@ export default function AdminDashboardScreen() {
                   </View>
                 </LinearGradient>
               </View>
+
+              <View style={[styles.statCard]}>
+                <LinearGradient
+                  colors={['#9C27B0', '#9C27B099']}
+                  style={styles.statGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <View style={styles.statContent}>
+                    <View style={styles.statHeader}>
+                      <Ionicons name="person-add" size={24} color="white" />
+                      <Text style={styles.statValue}>{stats.pendingVerifications}</Text>
+                    </View>
+                    <Text style={styles.statTitle}>Pending Verifications</Text>
+                  </View>
+                </LinearGradient>
+              </View>
             </View>
+
+            {/* Pending Users Section */}
+            {pendingUsers.length > 0 && (
+              <View style={styles.pendingUsersContainer}>
+                <Text style={styles.sectionTitle}>Pending User Verifications</Text>
+                {loadingPendingUsers ? (
+                  <ActivityIndicator size="small" color="#FFA000" />
+                ) : (
+                  <FlatList
+                    data={pendingUsers}
+                    renderItem={renderPendingUserCard}
+                    keyExtractor={item => item.id.toString()}
+                    scrollEnabled={false}
+                  />
+                )}
+              </View>
+            )}
 
             <View style={styles.chartContainer}>
               <Text style={styles.sectionTitle}>Application Statistics</Text>
@@ -483,5 +656,74 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  pendingUsersContainer: {
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 20,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  pendingUserCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  pendingUserInfo: {
+    flex: 1,
+  },
+  pendingUserName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  pendingUserEmail: {
+    fontSize: 14,
+    color: '#FFFFFF',
+    opacity: 0.8,
+    marginBottom: 2,
+  },
+  pendingUserStudentId: {
+    fontSize: 14,
+    color: '#FFFFFF',
+    opacity: 0.8,
+    fontStyle: 'italic',
+  },
+  verifyButton: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  verifyButtonText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  noDataText: {
+    color: '#FFFFFF',
+    textAlign: 'center',
+    marginTop: 10,
+    fontSize: 16,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: -1, height: 1 },
+    textShadowRadius: 10
   },
 }); 

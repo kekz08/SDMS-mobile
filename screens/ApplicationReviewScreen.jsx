@@ -228,6 +228,7 @@ export default function ApplicationReviewScreen({ navigation }) {
         setRemarks(item.remarks || '');
         setModalVisible(true);
       }}
+      activeOpacity={0.9}
     >
       <View style={styles.applicationHeader}>
         <View>
@@ -236,12 +237,13 @@ export default function ApplicationReviewScreen({ navigation }) {
         </View>
         <View style={[
           styles.statusBadge,
-          { backgroundColor: getStatusColor(item.status) }
+          { backgroundColor: item.status === 'approved' ? '#e3f6e8' : item.status === 'rejected' ? '#fae3e3' : '#fff7e3', borderColor: item.status === 'approved' ? '#43a047' : item.status === 'rejected' ? '#e53935' : '#ffa000' }
         ]}>
-          <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
+          <Ionicons name={item.status === 'approved' ? 'checkmark-circle' : item.status === 'rejected' ? 'close-circle' : 'time'} size={15} color={item.status === 'approved' ? '#43a047' : item.status === 'rejected' ? '#e53935' : '#ffa000'} />
+          <Text style={[styles.statusText, { color: item.status === 'approved' ? '#388e3c' : item.status === 'rejected' ? '#e53935' : '#ffa000' }]}>{item.status.toUpperCase()}</Text>
         </View>
       </View>
-
+      <View style={styles.divider} />
       <View style={styles.applicationDetails}>
         <View style={styles.detailItem}>
           <Ionicons name="mail-outline" size={16} color="#666" />
@@ -638,10 +640,17 @@ const styles = StyleSheet.create({
     padding: 15,
   },
   applicationCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 15,
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 22,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.10,
+    shadowRadius: 12,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: '#f2f2f2',
   },
   applicationHeader: {
     flexDirection: 'row',
@@ -660,14 +669,21 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderWidth: 1.5,
+    marginLeft: 8,
   },
-  statusText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: 'bold',
+  statusText: { fontWeight: 'bold', fontSize: 13, marginLeft: 5 },
+  divider: {
+    width: '100%',
+    height: 1,
+    backgroundColor: '#f2f2f2',
+    marginVertical: 14,
+    borderRadius: 1,
   },
   applicationDetails: {
     marginTop: 10,

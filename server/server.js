@@ -75,6 +75,9 @@ app.use(cors({
 app.use(express.json({ 
   limit: '50mb',
   verify: (req, res, buf) => {
+    if (buf.length === 0) {
+      return; // Skip JSON parsing for empty bodies
+    }
     try {
       JSON.parse(buf);
     } catch (e) {
@@ -131,7 +134,8 @@ app.post('/api/login', async (req, res) => {
         contactNumber,
         address,
         profileImage, 
-        password
+        password,
+        isVerified
       FROM users 
       WHERE email = ?
     `;
@@ -174,42 +178,28 @@ app.post('/api/login', async (req, res) => {
 
     // Convert file path to full URL if profileImage exists
     let profileImageUrl = user.profileImage;
-    if (profileImageUrl) {
-      profileImageUrl = profileImageUrl.startsWith('http') 
-        ? profileImageUrl 
-        : `${config.BASE_URL}/${profileImageUrl}`;
+    if (profileImageUrl && !profileImageUrl.startsWith('http')) {
+      profileImageUrl = `${config.BASE_URL}/${profileImageUrl}`;
     }
 
-    // Prepare response data with explicit field handling
-    const responseData = {
+    // Send response with user data
+    res.json({
       token,
       user: {
         id: user.id,
         firstName: user.firstName,
         lastName: user.lastName,
         email: user.email,
-        role: user.role, // Ensure role is included in response
-        studentId: user.studentId || '',
-        college: user.college || '',
-        course: user.course || '',
-        contactNumber: user.contactNumber || '',
-        address: user.address || '',
-        profileImage: profileImageUrl || ''
-      }
-    };
-
-    // Log the exact data being sent
-    console.log('Response data being sent:', {
-      token: '[HIDDEN]',
-      user: {
-        ...responseData.user,
-        role: responseData.user.role, // Log the role
-        contactNumber: `'${responseData.user.contactNumber}'`,
-        address: `'${responseData.user.address}'`
+        role: user.role,
+        studentId: user.studentId,
+        college: user.college,
+        course: user.course,
+        contactNumber: user.contactNumber,
+        address: user.address,
+        profileImage: profileImageUrl,
+        isVerified: user.isVerified
       }
     });
-
-    res.json(responseData);
   } catch (error) {
     console.error('Login error:', error);
     console.error('Error details:', error.message);
@@ -308,14 +298,16 @@ app.post('/api/register', async (req, res) => {
         college, 
         course, 
         address,
-        role
+        role,
+        isVerified
       ) VALUES (
         ?, ?, ?, 
         CASE WHEN ? IS NULL OR ? = '' THEN '' ELSE ? END,
         ?,
         ?, ?, ?,
         CASE WHEN ? IS NULL OR ? = '' THEN '' ELSE ? END,
-        'user'
+        'user',
+        FALSE
       )
     `;
 
@@ -392,6 +384,7 @@ app.get('/api/admin/users', authenticateToken, isAdmin, async (req, res) => {
         contactNumber,
         address,
         profileImage,
+        isVerified,
         createdAt,
         updatedAt
       FROM users
@@ -434,6 +427,66 @@ app.patch('/api/admin/users/:id/role', authenticateToken, isAdmin, async (req, r
   } catch (error) {
     console.error('Error updating user role:', error);
     res.status(500).json({ message: 'Failed to update user role' });
+  }
+});
+
+// Admin route - Verify user
+app.patch('/api/admin/users/:id/verify', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    console.log('=== Verifying User ===');
+    const { id } = req.params;
+    console.log('User ID:', id);
+
+    // Check if user exists
+    const [user] = await db.execute('SELECT id, firstName, lastName, isVerified FROM users WHERE id = ?', [id]);
+    console.log('User data:', user[0]);
+    
+    if (user.length === 0) {
+      console.log('User not found');
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Check if user is already verified
+    if (user[0].isVerified === true) {
+      console.log('User already verified');
+      return res.status(400).json({ message: 'User is already verified' });
+    }
+
+    // Update user verification status
+    console.log('Updating user verification status');
+    await db.execute('UPDATE users SET isVerified = TRUE WHERE id = ?', [id]);
+
+    // Create a detailed notification for the user
+    const notificationTitle = 'Account Verified Successfully';
+    const notificationMessage = `Dear ${user[0].firstName} ${user[0].lastName},\n\nYour account has been verified by an administrator. You now have full access to all features of the Scholarship Management System, including:\n\n• Educational Aids\n• Application Status\n• Announcements\n• Concerns\n• Profile Management\n\nWelcome to the platform!`;
+
+    console.log('Creating notification');
+    await db.execute(
+      'INSERT INTO notifications (userId, title, message, type) VALUES (?, ?, ?, ?)',
+      [
+        id,
+        notificationTitle,
+        notificationMessage,
+        'success'
+      ]
+    );
+
+    console.log('Sending success response');
+    return res.status(200).json({ 
+      success: true,
+      message: 'User verified successfully',
+      notification: {
+        title: notificationTitle,
+        message: notificationMessage
+      }
+    });
+  } catch (error) {
+    console.error('Error in verify user endpoint:', error);
+    return res.status(500).json({ 
+      success: false,
+      message: 'Failed to verify user',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 
@@ -820,12 +873,14 @@ app.get('/api/admin/stats', authenticateToken, isAdmin, async (req, res) => {
     const [totalScholarships] = await db.execute('SELECT COUNT(*) as total FROM scholarships WHERE status = "active"');
     const [pendingApplications] = await db.execute('SELECT COUNT(*) as total FROM applications WHERE status = "pending"');
     const [approvedApplications] = await db.execute('SELECT COUNT(*) as total FROM applications WHERE status = "approved"');
+    const [pendingVerifications] = await db.execute('SELECT COUNT(*) as total FROM users WHERE isVerified = FALSE AND role != "admin"');
 
     res.json({
       totalUsers: totalUsers[0].total,
       activeScholarships: totalScholarships[0].total,
       pendingApplications: pendingApplications[0].total,
-      approvedApplications: approvedApplications[0].total
+      approvedApplications: approvedApplications[0].total,
+      pendingVerifications: pendingVerifications[0].total
     });
   } catch (error) {
     console.error('Error fetching admin stats:', error);

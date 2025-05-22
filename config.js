@@ -1,7 +1,7 @@
 // Configuration object
 const config = {
-  API_URL: 'http://192.168.254.105:3000/api',
-  BASE_URL: 'http://192.168.254.105:3000'
+  API_URL: 'http://192.168.254.106:3000/api',
+  BASE_URL: 'http://192.168.254.106:3000'
 };
 
 // Named exports for backward compatibility

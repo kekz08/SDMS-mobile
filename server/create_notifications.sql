@@ -1,10 +1,10 @@
 DROP TABLE IF EXISTS notifications;
-CREATE TABLE notifications (
-  id INT AUTO_INCREMENT PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS notifications (
+  id INT PRIMARY KEY AUTO_INCREMENT,
   userId INT NOT NULL,
   title VARCHAR(255) NOT NULL,
   message TEXT NOT NULL,
-  type ENUM('success', 'error', 'info') DEFAULT 'info',
+  type ENUM('info', 'success', 'warning', 'error') DEFAULT 'info',
   isRead BOOLEAN DEFAULT FALSE,
   createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

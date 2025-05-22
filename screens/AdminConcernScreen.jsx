@@ -555,6 +555,56 @@ export default function AdminConcernScreen({ navigation }) {
     </Modal>
   );
 
+  const renderAdminConcernCard = (concern) => (
+    <View key={concern.id} style={styles.concernCard}>
+      <View style={styles.cardHeaderRow}>
+        <Text style={styles.concernTitle}>{concern.title}</Text>
+        <View style={[
+          styles.statusBadge,
+          { backgroundColor: concern.adminResponse ? '#e3f6e8' : '#fff7e3', borderColor: concern.adminResponse ? '#43a047' : '#ffa000' }
+        ]}>
+          <MaterialIcons name={concern.adminResponse ? 'check-circle' : 'hourglass-empty'} size={16} color={concern.adminResponse ? '#43a047' : '#ffa000'} />
+          <Text style={[styles.statusText, { color: concern.adminResponse ? '#388e3c' : '#ffa000' }]}>{concern.adminResponse ? 'Responded' : 'Pending'}</Text>
+        </View>
+      </View>
+      <View style={styles.metaRow}>
+        <View style={[styles.categoryBadge, { backgroundColor: '#e3ecfa', borderColor: '#1976d2' }]}> 
+          <MaterialIcons name="category" size={14} color="#1976d2" />
+          <Text style={[styles.categoryText, { color: '#1976d2' }]}>{getCategoryLabel(concern.category)}</Text>
+        </View>
+        <Text style={styles.metaInfo}>From: {concern.firstName} {concern.lastName} • {formatDate(concern.createdAt)}</Text>
+      </View>
+      <Text style={styles.concernMessage}>{concern.message}</Text>
+      {concern.adminResponse && (
+        <View style={styles.responseBox}>
+          <Text style={styles.responseLabel}>Admin Response:</Text>
+          <Text style={styles.responseText}>{concern.adminResponse}</Text>
+        </View>
+      )}
+      <View style={styles.cardActions}>
+        <TouchableOpacity
+          style={[styles.actionButton, styles.statusButton]}
+          onPress={() => {
+            setSelectedConcern(concern);
+            setShowStatusModal(true);
+          }}
+          activeOpacity={0.8}
+        >
+          <MaterialIcons name="update" size={20} color="#1976d2" />
+        </TouchableOpacity>
+        {concern.status !== 'resolved' && (
+          <TouchableOpacity
+            style={[styles.actionButton, styles.respondButton]}
+            onPress={() => handleRespond(concern)}
+            activeOpacity={0.8}
+          >
+            <MaterialIcons name="reply" size={20} color="#43a047" />
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
+
   if (loading) {
     return (
       <View style={[styles.container, styles.centerContent]}>
@@ -703,61 +753,7 @@ export default function AdminConcernScreen({ navigation }) {
         }
       >
         {sortConcerns(filteredAndSearchedConcerns).length > 0 ? (
-          sortConcerns(filteredAndSearchedConcerns).map((concern) => (
-            <View key={concern.id} style={styles.concernCard}>
-              <View style={styles.concernHeader}>
-                <View style={styles.concernTitleContainer}>
-                  <Text style={styles.concernTitle}>{concern.title}</Text>
-                  <Text style={styles.concernCategory}>
-                    {getCategoryLabel(concern.category)}
-                  </Text>
-                </View>
-                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(concern.status) }]}>
-                  <Text style={styles.statusText}>
-                    {concern.status.charAt(0).toUpperCase() + concern.status.slice(1)}
-                  </Text>
-                </View>
-              </View>
-
-              <Text style={styles.userInfo}>
-                From: {concern.firstName} {concern.lastName}
-              </Text>
-              <Text style={styles.concernDate}>{formatDate(concern.createdAt)}</Text>
-              <Text style={styles.concernMessage}>{concern.message}</Text>
-
-              {concern.adminResponse && (
-                <View style={styles.responseContainer}>
-                  <Text style={styles.responseLabel}>Admin Response:</Text>
-                  <Text style={styles.responseText}>{concern.adminResponse}</Text>
-                </View>
-              )}
-
-              <View style={styles.cardActions}>
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.statusButton]}
-                  onPress={() => {
-                    setSelectedConcern(concern);
-                    setShowStatusModal(true);
-                  }}
-                >
-                  <MaterialIcons name="update" size={20} color="white" />
-                  <Text style={styles.actionButtonText}>Update Status</Text>
-                </TouchableOpacity>
-
-                {concern.status !== 'resolved' && (
-                  <TouchableOpacity
-                    style={[styles.actionButton, styles.respondButton]}
-                    onPress={() => handleRespond(concern)}
-                  >
-                    <MaterialIcons name="reply" size={20} color="white" />
-                    <Text style={styles.actionButtonText}>
-                      {concern.adminResponse ? 'Update Response' : 'Respond'}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-          ))
+          sortConcerns(filteredAndSearchedConcerns).map((concern) => renderAdminConcernCard(concern))
         ) : (
           <Text style={styles.noConcernsText}>
             {searchQuery ? 'No concerns found matching your search' : 'No concerns found'}
@@ -888,84 +884,86 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   concernCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 15,
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    marginBottom: 20,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.10,
+    shadowRadius: 12,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: '#f2f2f2',
   },
-  concernHeader: {
+  cardHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 10,
-  },
-  concernTitleContainer: {
-    flex: 1,
-    marginRight: 10,
-  },
-  concernTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: 'white',
-    marginBottom: 5,
-  },
-  concernCategory: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.7)',
-  },
-  userInfo: {
-    fontSize: 14,
-    color: '#FFA000',
-    marginBottom: 5,
-  },
-  concernDate: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.6)',
-    marginBottom: 10,
+    alignItems: 'center',
+    marginBottom: 8,
   },
   statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderWidth: 1.5,
+    marginLeft: 8,
+  },
+  statusText: { fontWeight: 'bold', fontSize: 13, marginLeft: 5 },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  categoryBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
     paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 15,
+    paddingVertical: 3,
+    borderWidth: 1.5,
+    marginRight: 8,
   },
-  statusText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  concernMessage: {
-    fontSize: 15,
-    color: 'white',
-    lineHeight: 22,
-    marginBottom: 15,
-  },
-  responseContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 8,
+  categoryText: { fontWeight: 'bold', fontSize: 12, marginLeft: 4 },
+  metaInfo: { fontSize: 12, color: '#888', fontStyle: 'italic' },
+  concernTitle: { fontSize: 18, fontWeight: 'bold', color: '#222', flex: 1 },
+  concernMessage: { fontSize: 15, color: '#444', marginBottom: 10 },
+  responseBox: {
+    backgroundColor: '#e3f6e8',
+    borderRadius: 10,
     padding: 12,
-    marginBottom: 15,
+    marginTop: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#43a047',
   },
-  responseLabel: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#FFA000',
-    marginBottom: 5,
+  responseLabel: { color: '#388e3c', fontWeight: 'bold', marginBottom: 2 },
+  responseText: { color: '#222', fontSize: 14 },
+  cardActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 8,
   },
-  responseText: {
-    fontSize: 14,
-    color: 'white',
-    lineHeight: 20,
+  actionButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    marginLeft: 8,
+  },
+  statusButton: {
+    backgroundColor: '#e3ecfa',
+    borderColor: '#1976d2',
   },
   respondButton: {
-    backgroundColor: '#FFA000',
-    borderRadius: 8,
-    padding: 12,
-    alignItems: 'center',
-  },
-  respondButtonText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: 'bold',
+    backgroundColor: '#e3f6e8',
+    borderColor: '#43a047',
   },
   modalOverlay: {
     flex: 1,
@@ -1066,54 +1064,5 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     padding: 8,
     borderRadius: 20,
-  },
-  cardActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 15,
-    gap: 10,
-  },
-  actionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 10,
-    borderRadius: 8,
-    gap: 5,
-  },
-  statusButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  actionButtonText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  statusOption: {
-    padding: 15,
-    borderRadius: 8,
-    marginBottom: 10,
-  },
-  statusOptionText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  formatToolbar: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 8,
-    padding: 5,
-    marginBottom: 10,
-    justifyContent: 'space-around',
-  },
-  formatButton: {
-    padding: 8,
-    borderRadius: 4,
-  },
-  formatButtonActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
 }); 

@@ -120,10 +120,17 @@ export default function UserDrawerContent({ navigation, onLogout }) {
               {userData ? `${userData.firstName} ${userData.lastName}` : 'Loading...'}
             </Text>
             <Text style={styles.userRole}>Student</Text>
-            <View style={styles.verifiedBadge}>
-              <Ionicons name="checkmark-circle" size={14} color="#FFFFFF" style={styles.verifiedIcon} />
-              <Text style={styles.verifiedText}>Verified</Text>
-            </View>
+            {userData?.isVerified ? (
+              <View style={styles.verifiedBadge}>
+                <Ionicons name="checkmark-circle" size={14} color="#FFFFFF" style={styles.verifiedIcon} />
+                <Text style={styles.verifiedText}>Verified</Text>
+              </View>
+            ) : (
+              <View style={styles.unverifiedBadge}>
+                <Ionicons name="time" size={14} color="#FFA500" style={styles.verifiedIcon} />
+                <Text style={styles.unverifiedText}>Pending Verification</Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -134,35 +141,39 @@ export default function UserDrawerContent({ navigation, onLogout }) {
             onPress={() => navigation.navigate('Dashboard')}
           />
 
-          <CustomDrawerItem
-            label="Educational Aids"
-            icon="book-outline"
-            onPress={() => navigation.navigate('Educational Aids')}
-          />
+          {userData?.isVerified && (
+            <>
+              <CustomDrawerItem
+                label="Educational Aids"
+                icon="book-outline"
+                onPress={() => navigation.navigate('Educational Aids')}
+              />
 
-          <CustomDrawerItem
-            label="Application Status"
-            icon="star-outline"
-            onPress={() => navigation.navigate('Application Status')}
-          />
+              <CustomDrawerItem
+                label="Application Status"
+                icon="star-outline"
+                onPress={() => navigation.navigate('Application Status')}
+              />
 
-          <CustomDrawerItem
-            label="Announcements"
-            icon="megaphone-outline"
-            onPress={() => navigation.navigate('Announcements')}
-          />
+              <CustomDrawerItem
+                label="Announcements"
+                icon="megaphone-outline"
+                onPress={() => navigation.navigate('Announcements')}
+              />
 
-          <CustomDrawerItem
-            label="Concerns"
-            icon="information-circle-outline"
-            onPress={() => navigation.navigate('Concerns')}
-          />
+              <CustomDrawerItem
+                label="Concerns"
+                icon="information-circle-outline"
+                onPress={() => navigation.navigate('Concerns')}
+              />
 
-          <CustomDrawerItem
-            label="Profile"
-            icon="person-outline"
-            onPress={() => navigation.navigate('Profile')}
-          />
+              <CustomDrawerItem
+                label="Profile"
+                icon="person-outline"
+                onPress={() => navigation.navigate('Profile')}
+              />
+            </>
+          )}
         </View>
 
         <View style={styles.bottomDrawerSection}>
@@ -227,12 +238,25 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignSelf: 'flex-start',
   },
+  unverifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 165, 0, 0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 10,
+    alignSelf: 'flex-start',
+  },
   verifiedIcon: {
     marginRight: 4,
   },
   verifiedText: {
     fontSize: 12,
     color: '#FFFFFF',
+  },
+  unverifiedText: {
+    fontSize: 12,
+    color: '#FFA500',
   },
   drawerContent: {
     flex: 1,

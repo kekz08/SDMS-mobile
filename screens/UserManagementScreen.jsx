@@ -118,6 +118,70 @@ export default function UserManagementScreen({ navigation }) {
           }
         ]
       );
+    } else if (action === 'verify') {
+      Alert.alert(
+        'Verify User',
+        `Are you sure you want to verify ${user.firstName} ${user.lastName}?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Verify', 
+            onPress: () => verifyUser(user.id)
+          }
+        ]
+      );
+    }
+  };
+
+  const verifyUser = async (userId) => {
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      console.log('Sending verify request for user:', userId);
+      const response = await fetch(`${API_URL}/admin/users/${userId}/verify`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({})
+      });
+
+      console.log('Response status:', response.status);
+      const data = await response.json();
+      console.log('Response data:', data);
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to verify user');
+      }
+
+      if (!data.success) {
+        throw new Error(data.message || 'Verification failed');
+      }
+
+      // Update the users list with the verified status
+      const updatedUsers = users.map(user => 
+        user.id === userId ? { ...user, isVerified: true } : user
+      );
+      setUsers(updatedUsers);
+      setFilteredUsers(updatedUsers);
+      
+      Alert.alert(
+        'Success',
+        data.message || 'User verified successfully',
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      console.error('Error verifying user:', error);
+      Alert.alert(
+        'Error',
+        error.message || 'Failed to verify user',
+        [{ text: 'OK' }]
+      );
     }
   };
 
@@ -185,39 +249,62 @@ export default function UserManagementScreen({ navigation }) {
     }
   };
 
-  const renderUserCard = ({ item }) => (
-    <View style={styles.userCard}>
-      <View style={styles.userInfo}>
-        <Text style={styles.userName}>{item.firstName} {item.lastName}</Text>
-        <Text style={styles.userEmail}>{item.email}</Text>
-        {item.studentId && (
-          <Text style={styles.studentId}>ID: {item.studentId}</Text>
-        )}
-        <View style={styles.roleContainer}>
-          <Text style={[
-            styles.roleText,
-            { color: item.role === 'admin' ? '#4CAF50' : '#2196F3' }
-          ]}>
-            {item.role.toUpperCase()}
-          </Text>
+  const renderUserCard = ({ item }) => {
+    const isReallyVerified = item.role === 'admin' || item.isVerified === true || item.isVerified === 1 || item.isVerified === '1';
+    return (
+      <View style={styles.userCard}>
+        <View style={styles.userInfo}>
+          <Text style={styles.userName}>{item.firstName} {item.lastName}</Text>
+          <Text style={styles.userEmail}>{item.email}</Text>
+          {item.studentId && (
+            <Text style={styles.studentId}>ID: {item.studentId}</Text>
+          )}
+          <View style={styles.badgeRow}>
+            <View style={[
+              styles.roleBadge,
+              { backgroundColor: item.role === 'admin' ? '#e3f6e8' : '#e3ecfa', borderColor: item.role === 'admin' ? '#43a047' : '#1976d2' }
+            ]}>
+              <Ionicons name={item.role === 'admin' ? "shield-checkmark" : "person"} size={15} color={item.role === 'admin' ? '#43a047' : '#1976d2'} />
+              <Text style={[styles.badgeText, { color: item.role === 'admin' ? '#388e3c' : '#1976d2' }]}>{item.role.toUpperCase()}</Text>
+            </View>
+            <View style={[
+              styles.statusBadge,
+              { backgroundColor: isReallyVerified ? '#e3f6e8' : '#fff7e3', borderColor: isReallyVerified ? '#43a047' : '#ffa000' }
+            ]}>
+              <Ionicons name={isReallyVerified ? "checkmark-circle" : "time"} size={15} color={isReallyVerified ? '#43a047' : '#ffa000'} />
+              <Text style={[styles.badgeText, { color: isReallyVerified ? '#388e3c' : '#ffa000' }]}>{isReallyVerified ? 'Verified' : 'Pending'}</Text>
+            </View>
+          </View>
+        </View>
+        <View style={styles.divider} />
+        <View style={styles.actionButtons}>
+          {!isReallyVerified && item.role !== 'admin' && (
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: '#e3f6e8', borderColor: '#43a047' }]}
+              onPress={() => handleUserAction(item, 'verify')}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="checkmark-circle-outline" size={22} color="#43a047" />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={[styles.actionButton, { backgroundColor: '#e3ecfa', borderColor: '#1976d2' }]}
+            onPress={() => handleUserAction(item, 'edit')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="create-outline" size={22} color="#1976d2" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionButton, { backgroundColor: '#fae3e3', borderColor: '#e53935' }]}
+            onPress={() => handleUserAction(item, 'delete')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="trash-outline" size={22} color="#e53935" />
+          </TouchableOpacity>
         </View>
       </View>
-      <View style={styles.actionButtons}>
-        <TouchableOpacity 
-          style={[styles.actionButton, { backgroundColor: '#2196F3' }]}
-          onPress={() => handleUserAction(item, 'edit')}
-        >
-          <Ionicons name="create-outline" size={20} color="white" />
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.actionButton, { backgroundColor: '#F44336' }]}
-          onPress={() => handleUserAction(item, 'delete')}
-        >
-          <Ionicons name="trash-outline" size={20} color="white" />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -234,11 +321,11 @@ export default function UserManagementScreen({ navigation }) {
       </View>
 
       <View style={styles.searchContainer}>
-        <Ionicons name="search" size={20} color="rgba(255, 255, 255, 0.7)" />
+        <Ionicons name="search" size={20} color="#888" style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search by name, email, or ID..."
-          placeholderTextColor="rgba(255, 255, 255, 0.7)"
+          placeholderTextColor="#bbb"
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
@@ -287,38 +374,17 @@ export default function UserManagementScreen({ navigation }) {
             <Text style={styles.modalSubtitle}>
               {selectedUser ? `${selectedUser.firstName} ${selectedUser.lastName}` : ''}
             </Text>
-
+            <TextInput
+              style={styles.input}
+              placeholder="New Role"
+              value={selectedUser?.role}
+              onChangeText={(text) => setSelectedUser(prevUser => ({ ...prevUser, role: text }))}
+            />
             <TouchableOpacity
-              style={[
-                styles.roleButton,
-                selectedUser?.role === 'user' && styles.selectedRole
-              ]}
-              onPress={() => updateUserRole(selectedUser?.id, 'user')}
+              style={styles.updateButton}
+              onPress={() => updateUserRole(selectedUser.id, selectedUser.role)}
             >
-              <Text style={[
-                styles.roleButtonText,
-                selectedUser?.role === 'user' && styles.selectedRoleText
-              ]}>User</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.roleButton,
-                selectedUser?.role === 'admin' && styles.selectedRole
-              ]}
-              onPress={() => updateUserRole(selectedUser?.id, 'admin')}
-            >
-              <Text style={[
-                styles.roleButtonText,
-                selectedUser?.role === 'admin' && styles.selectedRoleText
-              ]}>Admin</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => setModalVisible(false)}
-            >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
+              <Text style={styles.updateButtonText}>Update Role</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -330,24 +396,25 @@ export default function UserManagementScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#008000',
+    backgroundColor: '#005500',
   },
   gradient: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    height: '100%',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.2)',
+    padding: 10,
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: 'white',
+    flex: 1,
   },
   refreshButton: {
     padding: 5,
@@ -355,96 +422,116 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    margin: 15,
-    paddingHorizontal: 15,
-    borderRadius: 10,
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    marginHorizontal: 18,
+    marginTop: 18,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  searchIcon: {
+    marginRight: 8,
   },
   searchInput: {
     flex: 1,
-    color: 'white',
-    paddingVertical: 10,
-    paddingHorizontal: 10,
+    fontSize: 16,
+    color: '#222',
+    paddingVertical: 6,
+    backgroundColor: 'transparent',
+  },
+  userCard: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 22,
+    marginBottom: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.10,
+    shadowRadius: 12,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: '#f2f2f2',
+  },
+  userInfo: { flex: 1 },
+  userName: { fontSize: 20, fontWeight: '700', color: '#222', marginBottom: 2 },
+  userEmail: { fontSize: 14, color: '#888', marginBottom: 1 },
+  studentId: { fontSize: 13, color: '#bbb', fontStyle: 'italic', marginBottom: 2 },
+  badgeRow: { flexDirection: 'row', marginTop: 10, gap: 10 },
+  roleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    marginRight: 8,
+    borderWidth: 1.5,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderWidth: 1.5,
+  },
+  badgeText: { fontWeight: 'bold', fontSize: 13, marginLeft: 5 },
+  divider: {
+    width: 1,
+    height: 60,
+    backgroundColor: '#f2f2f2',
+    marginHorizontal: 18,
+    borderRadius: 1,
+  },
+  actionButtons: { flexDirection: 'column', gap: 12 },
+  actionButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+    borderWidth: 1.5,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
   },
   loadingText: {
+    fontSize: 18,
+    fontWeight: 'bold',
     color: 'white',
-    fontSize: 16,
     marginTop: 10,
   },
   errorText: {
+    fontSize: 18,
+    fontWeight: 'bold',
     color: 'white',
-    fontSize: 16,
-    textAlign: 'center',
-    marginTop: 10,
-  },
-  noDataText: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 16,
-    textAlign: 'center',
     marginTop: 10,
   },
   retryButton: {
-    backgroundColor: '#FFA000',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    padding: 10,
+    backgroundColor: '#2196F3',
     borderRadius: 5,
-    marginTop: 15,
   },
   retryButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
     color: 'white',
+  },
+  noDataText: {
+    fontSize: 18,
     fontWeight: 'bold',
-  },
-  listContainer: {
-    padding: 15,
-  },
-  userCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 10,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  userInfo: {
-    flex: 1,
-  },
-  userName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  userEmail: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 2,
-  },
-  studentId: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 2,
-    fontStyle: 'italic',
-  },
-  roleContainer: {
-    marginTop: 5,
-  },
-  roleText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  actionButton: {
-    padding: 8,
-    borderRadius: 5,
+    color: 'white',
+    marginTop: 10,
   },
   modalContainer: {
     flex: 1,
@@ -454,46 +541,39 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: 'white',
-    borderRadius: 15,
     padding: 20,
+    borderRadius: 10,
     width: '80%',
     alignItems: 'center',
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
-    marginBottom: 5,
+    marginBottom: 10,
   },
   modalSubtitle: {
     fontSize: 16,
-    color: '#666',
-    marginBottom: 20,
-  },
-  roleButton: {
-    width: '100%',
-    padding: 15,
-    borderRadius: 10,
-    backgroundColor: '#f0f0f0',
     marginBottom: 10,
   },
-  selectedRole: {
-    backgroundColor: '#4CAF50',
+  input: {
+    width: '100%',
+    padding: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 5,
+    color: 'white',
+    marginBottom: 10,
   },
-  roleButtonText: {
-    textAlign: 'center',
-    fontSize: 16,
+  updateButton: {
+    padding: 10,
+    backgroundColor: '#2196F3',
+    borderRadius: 5,
+  },
+  updateButtonText: {
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
-  },
-  selectedRoleText: {
     color: 'white',
   },
-  cancelButton: {
-    marginTop: 10,
+  listContainer: {
+    padding: 10,
   },
-  cancelButtonText: {
-    color: '#F44336',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-}); 
+});

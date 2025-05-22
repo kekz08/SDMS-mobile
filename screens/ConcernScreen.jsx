@@ -574,90 +574,75 @@ export default function ConcernScreen() {
       marginLeft: 6,
     },
     concernCard: {
-      backgroundColor: 'rgba(255, 255, 255, 0.1)',
-      borderRadius: 15,
-      marginBottom: 15,
-      overflow: 'hidden',
-      borderLeftWidth: 4,
-      borderLeftColor: 'transparent',
-      elevation: 2,
+      backgroundColor: '#fff',
+      borderRadius: 18,
+      marginBottom: 20,
+      padding: 20,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.10,
+      shadowRadius: 12,
+      elevation: 5,
+      borderWidth: 1,
+      borderColor: '#f2f2f2',
     },
-    respondedConcernCard: {
-      borderLeftColor: '#4CAF50',
-    },
-    concernCardContent: {
-      padding: 16,
-    },
-    concernHeader: {
+    cardHeaderRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      alignItems: 'flex-start',
-      marginBottom: 12,
-    },
-    concernTitleContainer: {
-      flex: 1,
-      marginRight: 12,
-    },
-    concernTitle: {
-      fontSize: 18,
-      fontWeight: 'bold',
-      color: 'white',
-      marginBottom: 6,
-    },
-    concernCategory: {
-      fontSize: 14,
-      color: 'rgba(255, 255, 255, 0.8)',
-      marginBottom: 6,
-      flexDirection: 'row',
       alignItems: 'center',
-    },
-    categoryIcon: {
-      marginRight: 6,
+      marginBottom: 8,
     },
     statusBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderRadius: 14,
       paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 20,
-      elevation: 1,
+      paddingVertical: 4,
+      borderWidth: 1.5,
+      marginLeft: 8,
     },
-    statusText: {
-      fontSize: 13,
-      color: 'white',
-      fontWeight: 'bold',
+    statusText: { fontWeight: 'bold', fontSize: 13, marginLeft: 5 },
+    metaRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 8,
     },
-    concernDate: {
-      fontSize: 13,
-      color: 'rgba(255, 255, 255, 0.7)',
-      marginBottom: 10,
-      fontStyle: 'italic',
-    },
-    concernMessage: {
-      fontSize: 15,
-      color: 'rgba(255, 255, 255, 0.9)',
-      lineHeight: 22,
-      marginBottom: 12,
-    },
-    responsePreview: {
-      backgroundColor: 'rgba(0, 0, 0, 0.2)',
-      padding: 15,
+    categoryBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
       borderRadius: 12,
-      marginTop: 10,
+      paddingHorizontal: 10,
+      paddingVertical: 3,
+      borderWidth: 1.5,
+      marginRight: 8,
     },
+    categoryText: { fontWeight: 'bold', fontSize: 12, marginLeft: 4 },
+    metaInfo: { fontSize: 12, color: '#888', fontStyle: 'italic' },
+    concernTitle: { fontSize: 18, fontWeight: 'bold', color: '#222', flex: 1 },
+    concernMessage: { fontSize: 15, color: '#444', marginBottom: 10 },
+    responseBox: {
+      backgroundColor: '#e3f6e8',
+      borderRadius: 10,
+      padding: 12,
+      marginTop: 8,
+      marginBottom: 8,
+      borderWidth: 1,
+      borderColor: '#43a047',
+    },
+    responseLabel: { color: '#388e3c', fontWeight: 'bold', marginBottom: 2 },
+    responseText: { color: '#222', fontSize: 14 },
     awaitingResponse: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: 'rgba(0, 0, 0, 0.2)',
-      padding: 12,
-      borderRadius: 12,
-      marginTop: 10,
+      backgroundColor: '#fff7e3',
+      borderRadius: 10,
+      padding: 10,
+      marginTop: 8,
+      borderWidth: 1,
+      borderColor: '#ffa000',
     },
-    awaitingResponseText: {
-      color: '#FFA000',
-      fontSize: 14,
-      marginLeft: 8,
-      fontWeight: '500',
-    },
+    awaitingResponseText: { color: '#ffa000', fontWeight: 'bold', marginLeft: 8 },
     responseHeader: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -819,12 +804,6 @@ export default function ConcernScreen() {
       backgroundColor: 'rgba(255, 160, 0, 0.15)',
       borderColor: '#FFA000',
     },
-    categoryOptionText: {
-      flex: 1,
-      fontSize: 16,
-      color: 'white',
-      fontWeight: '500',
-    },
     selectedCategoryText: {
       color: '#FFA000',
       fontWeight: 'bold',
@@ -857,80 +836,53 @@ export default function ConcernScreen() {
       fontSize: 16,
       textAlign: 'center',
     },
+    divider: {
+      width: '100%',
+      height: 1,
+      backgroundColor: '#f2f2f2',
+      marginVertical: 14,
+      borderRadius: 1,
+    },
   });
 
   const renderConcernCard = useCallback((item) => (
     <TouchableOpacity 
       key={item.id} 
-      style={[
-        styles.concernCard,
-        item.adminResponse && styles.respondedConcernCard
-      ]}
+      style={styles.concernCard}
       onPress={() => handleViewResponse(item)}
+      activeOpacity={0.9}
     >
-      <View style={styles.concernCardContent}>
-        <View style={styles.concernHeader}>
-          <View style={styles.concernTitleContainer}>
-            <Text style={styles.concernTitle}>
-              {item.title}
-            </Text>
-            <View style={styles.concernCategory}>
-              <MaterialIcons 
-                name={getCategoryIcon(item.category)} 
-                size={16} 
-                color="rgba(255, 255, 255, 0.8)" 
-                style={styles.categoryIcon}
-              />
-              <Text style={styles.categoryText}>
-                {categories.find(cat => cat.id === item.category)?.label}
-              </Text>
-            </View>
-          </View>
-          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-            <Text style={styles.statusText}>
-              {item.status.charAt(0).toUpperCase() + item.status.slice(1).replace('_', ' ')}
-            </Text>
-          </View>
+      <View style={styles.cardHeaderRow}>
+        <Text style={styles.concernTitle}>{item.title}</Text>
+        <View style={[
+          styles.statusBadge,
+          { backgroundColor: item.adminResponse ? '#e3f6e8' : '#fff7e3', borderColor: item.adminResponse ? '#43a047' : '#ffa000' }
+        ]}>
+          <MaterialIcons name={item.adminResponse ? 'check-circle' : 'hourglass-empty'} size={16} color={item.adminResponse ? '#43a047' : '#ffa000'} />
+          <Text style={[styles.statusText, { color: item.adminResponse ? '#388e3c' : '#ffa000' }]}>{item.adminResponse ? 'Responded' : 'Pending'}</Text>
         </View>
-
-        <Text style={styles.concernDate}>
-          Submitted {formatDate(item.createdAt)}
-        </Text>
-
-        <Text style={styles.concernMessage} numberOfLines={2}>
-          {item.message}
-        </Text>
-
-        {item.adminResponse ? (
-          <View style={styles.responsePreview}>
-            <View style={styles.responseHeader}>
-              <MaterialIcons name="admin-panel-settings" size={20} color="#FFA000" />
-              <Text style={[styles.responseHeaderText, { flex: 1, marginRight: 6 }]}>Admin Response</Text>
-              <Text
-                style={styles.responseDate}
-                numberOfLines={1}
-                ellipsizeMode="tail"
-              >
-                • {formatDate(item.updatedAt)}
-              </Text>
-            </View>
-            <Text style={styles.responsePreviewText} numberOfLines={2}>
-              {item.adminResponse}
-            </Text>
-            <View style={styles.viewDetailsContainer}>
-              <MaterialIcons name="touch-app" size={16} color="#FFA000" />
-              <Text style={styles.viewFullResponse}>
-                Tap to view full conversation
-              </Text>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.awaitingResponse}>
-            <MaterialIcons name="hourglass-empty" size={16} color="#FFA000" />
-            <Text style={styles.awaitingResponseText}>Awaiting response...</Text>
-          </View>
-        )}
       </View>
+      <View style={styles.metaRow}>
+        <View style={[styles.categoryBadge, { backgroundColor: '#e3ecfa', borderColor: '#1976d2' }]}> 
+          <MaterialIcons name="category" size={14} color="#1976d2" />
+          <Text style={[styles.categoryText, { color: '#1976d2' }]}> 
+            {categories.find(cat => cat.id === item.category)?.label}
+          </Text>
+        </View>
+        <Text style={styles.metaInfo}>Submitted {formatDate(item.createdAt)}</Text>
+      </View>
+      <Text style={styles.concernMessage}>{item.message}</Text>
+      {item.adminResponse ? (
+        <View style={styles.responseBox}>
+          <Text style={styles.responseLabel}>Admin Response:</Text>
+          <Text style={styles.responseText}>{item.adminResponse}</Text>
+        </View>
+      ) : (
+        <View style={styles.awaitingResponse}>
+          <MaterialIcons name="hourglass-empty" size={16} color="#ffa000" />
+          <Text style={[styles.awaitingResponseText, { color: '#ffa000' }]}>Awaiting response...</Text>
+        </View>
+      )}
     </TouchableOpacity>
   ), [handleViewResponse, categories, formatDate, getCategoryIcon, getStatusColor]);
 
