@@ -12,6 +12,9 @@ require('dotenv').config();
 // Import config
 const config = require('../config').default;
 
+// Import ratings routes
+const ratingsRouter = require('./routes/ratings');
+
 const app = express();
 
 // Configure multer for profile pictures
@@ -329,12 +332,38 @@ app.post('/api/register', async (req, res) => {
       values: values.map((v, i) => i === 6 ? '[HIDDEN]' : v)
     });
 
-    // Execute the query
+    // Execute the query and get the insertId
     const [result] = await db.execute(query, values);
+    const newUserId = result.insertId; // Get the ID of the newly registered user
+    console.log('Registration successful! User ID:', newUserId);
 
-    console.log('Registration successful! User ID:', result.insertId);
+    // Create a welcome notification for the new user
+    const welcomeTitle = 'Welcome to SDMS!';
+    const welcomeMessage = `Hello ${firstName} ${lastName},
+
+Thank you for registering for the Scholarship Data Management System. Your account has been created.
+
+Please note that your account needs to be verified by an administrator before you can access all features, including applying for scholarships.
+
+You will receive another notification once your account is verified.
+
+Thank you for your patience.`;
+
+    console.log('Creating welcome notification for user:', newUserId);
+    await db.execute(
+      'INSERT INTO notifications (userId, title, message, type) VALUES (?, ?, ?, ?)',
+      [
+        newUserId,
+        welcomeTitle,
+        welcomeMessage,
+        'info' // Use 'info' type for general information
+      ]
+    );
+    console.log('Welcome notification created successfully');
+
     res.status(201).json({
       message: 'User registered successfully',
+      userId: newUserId, // Optionally return the user ID to the frontend
       email: email
     });
   } catch (error) {
@@ -353,11 +382,13 @@ app.get('/api/dashboard', authenticateToken, async (req, res) => {
     const [totalApplicants] = await db.execute('SELECT COUNT(*) as total FROM applications');
     const [approvedApplications] = await db.execute('SELECT COUNT(*) as approved FROM applications WHERE status = "approved"');
     const [pendingApplications] = await db.execute('SELECT COUNT(*) as pending FROM applications WHERE status = "pending"');
+    const [rejectedApplications] = await db.execute('SELECT COUNT(*) as rejected FROM applications WHERE status = "rejected"');
 
     res.json({
       totalApplicants: totalApplicants[0].total,
       approvedApplications: approvedApplications[0].approved,
-      pendingApplications: pendingApplications[0].pending
+      pendingApplications: pendingApplications[0].pending,
+      rejectedApplications: rejectedApplications[0].rejected
     });
   } catch (error) {
     console.error(error);
@@ -873,6 +904,8 @@ app.get('/api/admin/stats', authenticateToken, isAdmin, async (req, res) => {
     const [totalScholarships] = await db.execute('SELECT COUNT(*) as total FROM scholarships WHERE status = "active"');
     const [pendingApplications] = await db.execute('SELECT COUNT(*) as total FROM applications WHERE status = "pending"');
     const [approvedApplications] = await db.execute('SELECT COUNT(*) as total FROM applications WHERE status = "approved"');
+    // Add query for rejected applications
+    const [rejectedApplications] = await db.execute('SELECT COUNT(*) as total FROM applications WHERE status = "rejected"');
     const [pendingVerifications] = await db.execute('SELECT COUNT(*) as total FROM users WHERE isVerified = FALSE AND role != "admin"');
 
     res.json({
@@ -880,6 +913,7 @@ app.get('/api/admin/stats', authenticateToken, isAdmin, async (req, res) => {
       activeScholarships: totalScholarships[0].total,
       pendingApplications: pendingApplications[0].total,
       approvedApplications: approvedApplications[0].total,
+      rejectedApplications: rejectedApplications[0].total, // Include rejected count
       pendingVerifications: pendingVerifications[0].total
     });
   } catch (error) {
@@ -2213,6 +2247,9 @@ app.get('/api/admin/concerns', authenticateToken, isAdmin, async (req, res) => {
     res.status(500).json({ message: 'Failed to fetch concerns' });
   }
 });
+
+// Add ratings routes
+app.use('/api/ratings', ratingsRouter);
 
 const PORT = config.PORT || 3000;
 const HOST = '0.0.0.0';  // Force binding to all interfaces

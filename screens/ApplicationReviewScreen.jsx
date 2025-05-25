@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -19,7 +19,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL, BASE_URL } from '../config';
 
-export default function ApplicationReviewScreen({ navigation }) {
+export default function ApplicationReviewScreen({ navigation, route }) {
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
@@ -29,12 +29,17 @@ export default function ApplicationReviewScreen({ navigation }) {
   const [imageModalVisible, setImageModalVisible] = useState(false);
   const [imageToView, setImageToView] = useState(null);
   const [nonImageDocUrl, setNonImageDocUrl] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdateTime, setLastUpdateTime] = useState(null);
 
+  // Set initial filter status from route params
   useEffect(() => {
-    fetchApplications();
-  }, []);
+    if (route.params?.initialStatus) {
+      setFilterStatus(route.params.initialStatus);
+    }
+  }, [route.params?.initialStatus]);
 
-  const fetchApplications = async () => {
+  const fetchApplications = useCallback(async () => {
     try {
       const token = await AsyncStorage.getItem('userToken');
       const response = await fetch(`${API_URL}/admin/applications`, {
@@ -49,12 +54,42 @@ export default function ApplicationReviewScreen({ navigation }) {
 
       const data = await response.json();
       setApplications(data);
+      setLastUpdateTime(new Date());
     } catch (error) {
       Alert.alert('Error', error.message);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, []);
+
+  // Initial fetch
+  useEffect(() => {
+    fetchApplications();
+  }, [fetchApplications]);
+
+  // Polling for updates every 30 seconds
+  useEffect(() => {
+    const pollInterval = setInterval(() => {
+      fetchApplications();
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [fetchApplications]);
+
+  // Refresh when screen is focused
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      fetchApplications();
+    });
+
+    return unsubscribe;
+  }, [navigation, fetchApplications]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchApplications();
+  }, [fetchApplications]);
 
   const createNotification = async (userId, title, message, type) => {
     try {
@@ -274,7 +309,9 @@ export default function ApplicationReviewScreen({ navigation }) {
           <Ionicons name="menu" size={32} color="white" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Application Review</Text>
-        <View style={{ width: 32 }} />
+        <TouchableOpacity onPress={onRefresh} style={styles.refreshButton}>
+          <Ionicons name="refresh" size={24} color="white" />
+        </TouchableOpacity>
       </View>
 
       <View style={styles.filterContainer}>
@@ -336,6 +373,15 @@ export default function ApplicationReviewScreen({ navigation }) {
           renderItem={renderApplicationCard}
           keyExtractor={item => item.id.toString()}
           contentContainerStyle={styles.listContainer}
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          ListFooterComponent={
+            lastUpdateTime && (
+              <Text style={styles.lastUpdateText}>
+                Last updated: {lastUpdateTime.toLocaleTimeString()}
+              </Text>
+            )
+          }
         />
       )}
 
@@ -430,7 +476,7 @@ export default function ApplicationReviewScreen({ navigation }) {
                           <Ionicons name="document-text" size={24} color="#008000" />
                         </View>
                         <View style={styles.documentInfo}>
-                          <Text style={styles.documentName}>Report Card</Text>
+                          <Text style={styles.documentName}>Certificate of Registration (COR)</Text>
                           <Text style={styles.documentType}>Academic Document</Text>
                         </View>
                         <Ionicons name="open-outline" size={20} color="#666" />
@@ -444,8 +490,8 @@ export default function ApplicationReviewScreen({ navigation }) {
                           <Ionicons name="document-text" size={24} color="#008000" />
                         </View>
                         <View style={styles.documentInfo}>
-                          <Text style={styles.documentName}>Barangay Clearance</Text>
-                          <Text style={styles.documentType}>Government Document</Text>
+                          <Text style={styles.documentName}>Certified True Copy of Grades (CTCG)</Text>
+                          <Text style={styles.documentType}>Academic Document</Text>
                         </View>
                         <Ionicons name="open-outline" size={20} color="#666" />
                       </TouchableOpacity>
@@ -458,7 +504,7 @@ export default function ApplicationReviewScreen({ navigation }) {
                           <Ionicons name="document-text" size={24} color="#008000" />
                         </View>
                         <View style={styles.documentInfo}>
-                          <Text style={styles.documentName}>Income Certificate</Text>
+                          <Text style={styles.documentName}>Income Tax Return (ITR) or Certificate of Indigency</Text>
                           <Text style={styles.documentType}>Financial Document</Text>
                         </View>
                         <Ionicons name="open-outline" size={20} color="#666" />
@@ -876,5 +922,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     borderRadius: 20,
     padding: 6,
+  },
+  refreshButton: {
+    padding: 5,
+  },
+  lastUpdateText: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    textAlign: 'center',
+    fontSize: 12,
+    marginTop: 10,
+    marginBottom: 20,
   },
 }); 

@@ -13,7 +13,6 @@ const NotificationPopup = ({ visible, onClose }) => {
     if (visible) {
       fetchNotifications();
     } else {
-      // Clear notifications when popup is closed
       setNotifications([]);
       setLoading(false);
       setRefreshing(false);
@@ -37,7 +36,6 @@ const NotificationPopup = ({ visible, onClose }) => {
 
       if (!response.ok) {
         if (response.status === 401) {
-          // Token is invalid or expired
           await AsyncStorage.multiRemove(['userToken', 'userData']);
           onClose();
           return;
@@ -78,7 +76,6 @@ const NotificationPopup = ({ visible, onClose }) => {
         throw new Error('Failed to mark notification as read');
       }
 
-      // Update local state
       setNotifications(notifications.map(notif => 
         notif.id === notificationId ? { ...notif, isRead: true } : notif
       ));

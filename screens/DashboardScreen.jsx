@@ -165,6 +165,24 @@ export default function DashboardScreen() {
     );
   }
 
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <LinearGradient colors={['#005500', '#007000', '#009000']} style={styles.gradient} />
+        <View style={styles.loadingContainer}>
+          <Ionicons name="warning" size={32} color="white" />
+          <Text style={styles.loadingText}>{error}</Text>
+          <TouchableOpacity 
+            style={styles.retryButton}
+            onPress={fetchUserApplications}
+          >
+            <Text style={styles.retryButtonText}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
       <View style={styles.container}>
@@ -207,7 +225,7 @@ export default function DashboardScreen() {
 
         <Text style={styles.heading}>My Scholarship Dashboard</Text>
 
-        {/* Summary Cards */}
+
         <View style={styles.summaryContainer}>
           <View style={styles.summaryCard}>
             <Text style={styles.summaryNumber}>{dashboardData.statusCounts.approved}</Text>
@@ -223,7 +241,6 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* Application Status Chart */}
         {(dashboardData.statusCounts.approved > 0 || 
           dashboardData.statusCounts.pending > 0 || 
           dashboardData.statusCounts.rejected > 0) && (
@@ -265,12 +282,11 @@ export default function DashboardScreen() {
           </View>
         )}
 
-        {/* Recent Applications */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Recent Applications</Text>
           {dashboardData.applications.length > 0 ? (
             <View style={styles.applicationsContainer}>
-              {dashboardData.applications.map((application, index) => (
+              {dashboardData.applications.map((application) => (
                 <ApplicationCard key={application.id} application={application} />
               ))}
             </View>
@@ -405,6 +421,16 @@ const styles = StyleSheet.create({
   loadingText: {
     color: 'white',
     marginTop: 10,
+    fontSize: 16,
+  },
+  retryButton: {
+    marginTop: 20,
+    padding: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 5,
+  },
+  retryButtonText: {
+    color: 'white',
     fontSize: 16,
   },
   applicationsContainer: {

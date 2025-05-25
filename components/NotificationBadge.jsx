@@ -8,7 +8,6 @@ const NotificationBadge = () => {
 
   useEffect(() => {
     fetchUnreadCount();
-    // Set up an interval to fetch the count every minute
     const interval = setInterval(fetchUnreadCount, 60000);
     return () => clearInterval(interval);
   }, []);

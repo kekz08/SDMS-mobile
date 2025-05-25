@@ -15,33 +15,78 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
-
-const BASE_URL = 'http://192.168.254.101:3000';
+import { API_URL, BASE_URL } from '../config';
 
 export default function AdminDrawerContent(props) {
   const [userData, setUserData] = useState(null);
   const [profileImage, setProfileImage] = useState(null);
 
   useEffect(() => {
+    console.log('AdminDrawerContent: useEffect triggered.');
     loadUserData();
-  }, []);
+    
+    // Add listener for profile image updates
+    const profileUpdateListener = props.navigation.addListener('focus', () => {
+      console.log('AdminDrawerContent focused, attempting to reload user data...');
+      loadUserData();
+    });
+
+    return () => {
+      profileUpdateListener();
+    };
+  }, [props.navigation]);
+
+  // Add a useEffect to log when profileImage state changes
+  useEffect(() => {
+    console.log('AdminDrawerContent: profileImage state updated:', profileImage);
+  }, [profileImage]);
 
   const loadUserData = async () => {
     try {
+      console.log('AdminDrawerContent: Loading user data...');
       const userDataString = await AsyncStorage.getItem('userData');
+      console.log('AdminDrawerContent: Raw data from AsyncStorage:', userDataString);
+      
       if (userDataString) {
         const parsedUserData = JSON.parse(userDataString);
+        console.log('AdminDrawerContent: Parsed user data:', parsedUserData);
         setUserData(parsedUserData);
         
         if (parsedUserData.profileImage) {
-          const imageUrl = parsedUserData.profileImage.startsWith('http') 
-            ? parsedUserData.profileImage 
-            : `${BASE_URL}/${parsedUserData.profileImage}`;
-          setProfileImage({ uri: imageUrl });
+          let imageUrl = parsedUserData.profileImage;
+          console.log('AdminDrawerContent: Original image URL from data:', imageUrl);
+          
+          let finalImageUrl = imageUrl;
+
+          // Check if the URL contains 'uploads/' and extract the relative part
+          if (imageUrl.includes('uploads/')) {
+            const uploadsIndex = imageUrl.indexOf('uploads/');
+            const relativePath = imageUrl.substring(uploadsIndex);
+            // Construct the full URL with BASE_URL and add cache buster
+            finalImageUrl = `${BASE_URL}/${relativePath}?timestamp=${new Date().getTime()}`;
+             console.log('AdminDrawerContent: Extracted relative path from uploads/ and constructed URL:', finalImageUrl);
+          } else if (imageUrl.startsWith('http')) {
+             // If it's a full http URL, use it directly (add cache buster just in case)
+             console.log('AdminDrawerContent: Using http URL directly:', imageUrl);
+             finalImageUrl = `${imageUrl}?timestamp=${new Date().getTime()}`;
+          } else {
+            // Fallback for unexpected format (add cache buster)
+            console.warn('AdminDrawerContent: Unexpected image URL format, attempting to prepend BASE_URL:', imageUrl);
+            finalImageUrl = `${BASE_URL}/${imageUrl}?timestamp=${new Date().getTime()}`;
+          }
+
+          console.log('AdminDrawerContent: Final profile image URL being set:', finalImageUrl);
+          setProfileImage({ uri: finalImageUrl });
+        } else {
+           console.log('AdminDrawerContent: No profile image URL found in user data.');
+           setProfileImage(require('../assets/profile-placeholder.png'));
         }
+      } else {
+        console.log('AdminDrawerContent: No user data found in AsyncStorage.');
+        setProfileImage(require('../assets/profile-placeholder.png'));
       }
     } catch (error) {
-      console.error('Error loading user data:', error);
+      console.error('AdminDrawerContent: Error loading user data:', error);
     }
   };
 
@@ -110,6 +155,11 @@ export default function AdminDrawerContent(props) {
           <Image
             source={profileImage || require('../assets/profile-placeholder.png')}
             style={styles.profileImage}
+            defaultSource={require('../assets/profile-placeholder.png')}
+            onError={(e) => {
+              console.error('AdminDrawerContent: Error loading profile image:', e.nativeEvent.error);
+              // Optionally set to null or placeholder on error
+            }}
           />
           <View style={styles.userInfo}>
             <Text style={styles.userName}>

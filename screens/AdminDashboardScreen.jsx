@@ -39,6 +39,7 @@ export default function AdminDashboardScreen() {
     activeScholarships: 0,
     pendingApplications: 0,
     approvedApplications: 0,
+    rejectedApplications: 0,
     pendingVerifications: 0
   });
 
@@ -52,23 +53,69 @@ export default function AdminDashboardScreen() {
       fetchNotificationCount();
     }, 60000); // Refresh every minute
 
-    return () => clearInterval(notificationInterval);
-  }, []);
+    // Add listener for profile image updates
+    const profileUpdateListener = navigation.addListener('focus', () => {
+      console.log('AdminDashboardScreen focused, attempting to reload user data...');
+      loadUserData();
+      fetchAdminData(); // Ensure stats are refreshed on focus
+    });
+
+    return () => {
+      clearInterval(notificationInterval);
+      profileUpdateListener();
+    };
+  }, [navigation]);
 
   const loadUserData = async () => {
     try {
+      console.log('AdminDashboardScreen: Loading user data...');
       const userDataString = await AsyncStorage.getItem('userData');
+      console.log('AdminDashboardScreen: Raw data from AsyncStorage:', userDataString);
+      
       if (userDataString) {
         const parsedUserData = JSON.parse(userDataString);
+        console.log('AdminDashboardScreen: Parsed user data:', parsedUserData);
+        
         if (parsedUserData.profileImage) {
-          const imageUrl = parsedUserData.profileImage.startsWith('http') 
-            ? parsedUserData.profileImage 
-            : `${BASE_URL}/${parsedUserData.profileImage}`;
-          setProfileImage({ uri: imageUrl });
+          let imageUrl = parsedUserData.profileImage;
+          console.log('AdminDashboardScreen: Original image URL from data:', imageUrl);
+          
+          let finalImageUrl = imageUrl;
+
+          // Check if the URL contains 'uploads/' and extract the relative part
+          if (imageUrl.includes('uploads/')) {
+            const uploadsIndex = imageUrl.indexOf('uploads/');
+            const relativePath = imageUrl.substring(uploadsIndex);
+            // Construct the full URL with BASE_URL
+            finalImageUrl = `${BASE_URL}/${relativePath}`;
+             console.log('AdminDashboardScreen: Extracted relative path from uploads/ and constructed URL:', finalImageUrl);
+          } else if (imageUrl.startsWith('http')) {
+             // If it's a full http URL but doesn't contain 'uploads/' in the expected way, use it directly.
+             // This might be for external images or different storage structures.
+             console.log('AdminDashboardScreen: Using http URL directly:', imageUrl);
+             finalImageUrl = imageUrl;
+          } else {
+            // If it doesn't contain 'uploads/' and is not an http URL, it might be just a filename or unexpected format.
+            // We can try prepending BASE_URL as a fallback, but log a warning.
+            console.warn('AdminDashboardScreen: Unexpected image URL format, attempting to prepend BASE_URL:', imageUrl);
+            finalImageUrl = `${BASE_URL}/${imageUrl}`;
+          }
+
+          // Add a cache-busting timestamp
+          finalImageUrl = `${finalImageUrl}?timestamp=${new Date().getTime()}`;
+          
+          console.log('AdminDashboardScreen: Final profile image URL being set:', finalImageUrl);
+          setProfileImage({ uri: finalImageUrl });
+        } else {
+           console.log('AdminDashboardScreen: No profile image URL found in user data.');
+           setProfileImage(require('../assets/profile-placeholder.png'));
         }
+      } else {
+        console.log('AdminDashboardScreen: No user data found in AsyncStorage.');
+        setProfileImage(require('../assets/profile-placeholder.png'));
       }
     } catch (error) {
-      console.error('Error loading user data:', error);
+      console.error('AdminDashboardScreen: Error loading user data:', error);
       setProfileImage(require('../assets/profile-placeholder.png'));
     }
   };
@@ -106,7 +153,7 @@ export default function AdminDashboardScreen() {
         throw new Error('No authentication token found');
       }
 
-      console.log('Fetching admin stats...');
+      console.log('Fetching admin stats for dashboard refresh...');
       const response = await fetch(`${API_URL}/admin/stats`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -115,27 +162,23 @@ export default function AdminDashboardScreen() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch admin statistics');
+        const errorData = await response.json().catch(() => null);
+        console.error('Failed to fetch admin statistics, response:', errorData);
+        throw new Error(errorData?.message || 'Failed to fetch admin statistics');
       }
 
       const data = await response.json();
-      console.log('Admin stats received:', data);
+      console.log('Admin stats received for dashboard refresh:', data);
 
       setStats({
         totalUsers: data.totalUsers,
         activeScholarships: data.activeScholarships,
         pendingApplications: data.pendingApplications,
         approvedApplications: data.approvedApplications,
-        pendingVerifications: data.pendingVerifications || 0 // Ensure we have a default value
-      });
-
-      console.log('Updated stats state:', {
-        totalUsers: data.totalUsers,
-        activeScholarships: data.activeScholarships,
-        pendingApplications: data.pendingApplications,
-        approvedApplications: data.approvedApplications,
+        rejectedApplications: data.rejectedApplications || 0,
         pendingVerifications: data.pendingVerifications || 0
       });
+
     } catch (error) {
       console.error('Error fetching admin data:', error);
       setError(error.message);
@@ -300,11 +343,14 @@ export default function AdminDashboardScreen() {
               />
               <NotificationBadge count={notificationCount} />
             </TouchableOpacity>
-            <Image
-              source={profileImage || require('../assets/profile-placeholder.png')}
-              style={styles.profileImage}
-              onError={() => setProfileImage(require('../assets/profile-placeholder.png'))}
-            />
+            <TouchableOpacity onPress={() => navigation.navigate('AdminProfile')}>
+              <Image
+                source={profileImage || require('../assets/profile-placeholder.png')}
+                style={styles.profileImage}
+                defaultSource={require('../assets/profile-placeholder.png')}
+                onError={() => setProfileImage(require('../assets/profile-placeholder.png'))}
+              />
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -330,7 +376,10 @@ export default function AdminDashboardScreen() {
         ) : (
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
             <View style={styles.statsGrid}>
-              <View style={[styles.statCard]}>
+              <TouchableOpacity 
+                style={styles.statCard}
+                onPress={() => navigation.navigate('UserManagement')}
+              >
                 <LinearGradient
                   colors={['#2196F3', '#2196F399']}
                   style={styles.statGradient}
@@ -345,9 +394,12 @@ export default function AdminDashboardScreen() {
                     <Text style={styles.statTitle}>Total Users</Text>
                   </View>
                 </LinearGradient>
-              </View>
+              </TouchableOpacity>
 
-              <View style={[styles.statCard]}>
+              <TouchableOpacity 
+                style={styles.statCard}
+                onPress={() => navigation.navigate('ScholarshipManagement')}
+              >
                 <LinearGradient
                   colors={['#4CAF50', '#4CAF5099']}
                   style={styles.statGradient}
@@ -362,9 +414,12 @@ export default function AdminDashboardScreen() {
                     <Text style={styles.statTitle}>Active Scholarships</Text>
                   </View>
                 </LinearGradient>
-              </View>
+              </TouchableOpacity>
 
-              <View style={[styles.statCard]}>
+              <TouchableOpacity 
+                style={styles.statCard}
+                onPress={() => navigation.navigate('ApplicationReview', { initialStatus: 'pending' })}
+              >
                 <LinearGradient
                   colors={['#FFA000', '#FFA00099']}
                   style={styles.statGradient}
@@ -379,11 +434,14 @@ export default function AdminDashboardScreen() {
                     <Text style={styles.statTitle}>Pending Applications</Text>
                   </View>
                 </LinearGradient>
-              </View>
+              </TouchableOpacity>
 
-              <View style={[styles.statCard]}>
+              <TouchableOpacity 
+                style={styles.statCard}
+                onPress={() => navigation.navigate('ApplicationReview', { initialStatus: 'approved' })}
+              >
                 <LinearGradient
-                  colors={['#F44336', '#F4433699']}
+                  colors={['#4CAF50', '#4CAF5099']}
                   style={styles.statGradient}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
@@ -396,9 +454,32 @@ export default function AdminDashboardScreen() {
                     <Text style={styles.statTitle}>Approved Applications</Text>
                   </View>
                 </LinearGradient>
-              </View>
+              </TouchableOpacity>
 
-              <View style={[styles.statCard]}>
+              <TouchableOpacity 
+                style={styles.statCard}
+                onPress={() => navigation.navigate('ApplicationReview', { initialStatus: 'rejected' })}
+              >
+                <LinearGradient
+                  colors={['#F44336', '#F4433699']}
+                  style={styles.statGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <View style={styles.statContent}>
+                    <View style={styles.statHeader}>
+                      <Ionicons name="close-circle" size={24} color="white" />
+                      <Text style={styles.statValue}>{stats.rejectedApplications}</Text>
+                    </View>
+                    <Text style={styles.statTitle}>Rejected Applications</Text>
+                  </View>
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.statCard}
+                onPress={() => navigation.navigate('UserManagement', { initialFilter: 'pending' })}
+              >
                 <LinearGradient
                   colors={['#9C27B0', '#9C27B099']}
                   style={styles.statGradient}
@@ -413,7 +494,7 @@ export default function AdminDashboardScreen() {
                     <Text style={styles.statTitle}>Pending Verifications</Text>
                   </View>
                 </LinearGradient>
-              </View>
+              </TouchableOpacity>
             </View>
 
             {/* Pending Users Section */}
@@ -453,7 +534,7 @@ export default function AdminDashboardScreen() {
                   },
                   { 
                     name: 'Rejected', 
-                    population: stats.totalUsers - (stats.approvedApplications + stats.pendingApplications), 
+                    population: stats.rejectedApplications,
                     color: '#F44336', 
                     legendFontColor: '#FFFFFF',
                     legendFontSize: 12 

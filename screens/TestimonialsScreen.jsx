@@ -1,41 +1,90 @@
-import { View, Text, Image, TouchableOpacity, StyleSheet, Animated, Dimensions } from 'react-native';
+import { View, Text, Image, TouchableOpacity, StyleSheet, Animated, Dimensions, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState, useEffect, useRef } from 'react';
 import { commonStyles } from '../styles/styles';
+import { BASE_URL } from '../config';
 
 const { width } = Dimensions.get('window');
-
-const testimonials = [
-  {
-    name: 'Tricia Manto',
-    quote: 'I highly recommend SDMS to anyone looking for scholarships! The platform made it so easy to find and apply for opportunities.',
-    image: require('../assets/tricia.jpg'),
-    role: 'Computer Science Scholar'
-  },
-  {
-    name: 'Johanna Marie B. Alipao',
-    quote: 'The application process was smooth and hassle-free, thanks to SDMS. I received my scholarship approval within just 2 weeks!',
-    image: require('../assets/johanna.jpg'),
-    role: 'Engineering Scholar'
-  },
-  {
-    name: 'Haidee G. Lisondra',
-    quote: 'SDMS has been a game-changer in helping me find the right scholarship. Their personalized recommendations saved me hours of research.',
-    image: require('../assets/haidee.jpg'),
-    role: 'Education Scholar'
-  },
-];
 
 export default function TestimonialScreen() {
   const navigation = useNavigation();
   const [testimonialIndex, setTestimonialIndex] = useState(0);
+  const [testimonials, setTestimonials] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
 
+  useEffect(() => {
+    console.log('TestimonialsScreen - Using BASE_URL:', BASE_URL);
+    fetchTestimonials();
+  }, []);
+
+  const fetchTestimonials = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      console.log('Fetching ratings from:', `${BASE_URL}/api/ratings`);
+      const response = await fetch(`${BASE_URL}/api/ratings`, {
+        method: 'GET',
+      });
+      
+      console.log('Response status:', response.status);
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error('Error response:', errorData);
+        throw new Error(`Failed to fetch ratings: ${response.status} ${response.statusText}`);
+      }
+      
+      const ratings = await response.json();
+      console.log('Received ratings:', ratings);
+      
+      if (ratings && ratings.length > 0) {
+        console.log('Raw ratings data:', ratings);
+        // Transform the ratings data to match the testimonial format
+        const formattedTestimonials = ratings.map(rating => {
+          console.log('Processing rating:', rating);
+          
+          // Handle the image source
+          let imageSource;
+          if (rating.profileImage) {
+            imageSource = { uri: rating.profileImage };
+            console.log('Using image source:', imageSource);
+          } else {
+            console.log('No profile image, using placeholder');
+            imageSource = require('../assets/profile-placeholder.png');
+          }
+          
+          return {
+            name: rating.user_name || 'Anonymous',
+            quote: rating.comment || 'No comment provided',
+            image: imageSource,
+            role: rating.user_role || 'User',
+            rating: rating.rating || 5
+          };
+        });
+
+        console.log('Formatted testimonials:', formattedTestimonials);
+        setTestimonials(formattedTestimonials);
+      } else {
+        console.log('No ratings data available');
+        setTestimonials([]);
+      }
+    } catch (error) {
+      console.error('Error fetching testimonials:', error);
+      setError(`Failed to load testimonials: ${error.message}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Animation for testimonial transition
   const animateTestimonialChange = (newIndex) => {
+    if (testimonials.length === 0) return;
+
     Animated.sequence([
       Animated.parallel([
         Animated.timing(fadeAnim, {
@@ -71,32 +120,85 @@ export default function TestimonialScreen() {
   };
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      animateTestimonialChange((testimonialIndex + 1) % testimonials.length);
-    }, 5000);
+    if (testimonials.length > 0) {
+      const interval = setInterval(() => {
+        animateTestimonialChange((testimonialIndex + 1) % testimonials.length);
+      }, 5000);
 
-    return () => clearInterval(interval);
-  }, [testimonialIndex]);
+      return () => clearInterval(interval);
+    }
+  }, [testimonialIndex, testimonials.length]);
 
   const goToPrev = () => {
-    animateTestimonialChange((testimonialIndex - 1 + testimonials.length) % testimonials.length);
+    if (testimonials.length > 0) {
+      animateTestimonialChange((testimonialIndex - 1 + testimonials.length) % testimonials.length);
+    }
   };
 
   const goToNext = () => {
-    animateTestimonialChange((testimonialIndex + 1) % testimonials.length);
+    if (testimonials.length > 0) {
+      animateTestimonialChange((testimonialIndex + 1) % testimonials.length);
+    }
   };
+
+  const renderStars = (rating) => {
+    return (
+      <View style={styles.starsContainer}>
+        {[1, 2, 3, 4, 5].map((star) => (
+          <Ionicons
+            key={star}
+            name={star <= rating ? 'star' : 'star-outline'}
+            size={16}
+            color={star <= rating ? '#FFD700' : '#FFFFFF'}
+            style={styles.star}
+          />
+        ))}
+      </View>
+    );
+  };
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <ActivityIndicator size="large" color="#FFFFFF" />
+        <Text style={styles.loadingText}>Loading testimonials...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <Ionicons name="alert-circle" size={48} color="#FFFFFF" />
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={fetchTestimonials}>
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (testimonials.length === 0) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <Ionicons name="chatbubble-outline" size={48} color="#FFFFFF" />
+        <Text style={styles.errorText}>No testimonials available yet.</Text>
+        <Text style={styles.subText}>Be the first to share your experience!</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      <LinearGradient 
-        colors={['#005500', '#007000', '#009000']} 
+      <LinearGradient
+        colors={['#005500', '#007000', '#009000']}
         style={styles.gradient}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       />
       <Image source={require('../assets/logo.png')} style={styles.bgLogo} />
 
-        <View style={styles.header}>
+      <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.openDrawer()}>
           <Ionicons name="menu" size={32} color="white" />
         </TouchableOpacity>
@@ -112,16 +214,24 @@ export default function TestimonialScreen() {
             styles.testimonialBox,
             { 
               opacity: fadeAnim,
-              transform: [{ translateX: slideAnim }] 
+              transform: [{ translateX: slideAnim }]
             }
           ]}
         >
-          <Image 
-            source={testimonials[testimonialIndex].image} 
+          <Image
+            source={testimonials[testimonialIndex].image}
             style={styles.profileImage}
             resizeMode="cover"
+            onError={(error) => {
+              console.error('Image loading error:', error.nativeEvent);
+              console.log('Failed image source:', testimonials[testimonialIndex].image);
+            }}
+            onLoad={() => {
+              console.log('Image loaded successfully:', testimonials[testimonialIndex].image);
+            }}
           />
           <Text style={styles.clientSays}>What Our Scholars Say</Text>
+          {renderStars(testimonials[testimonialIndex].rating)}
           <Text style={styles.quote}>&quot;{testimonials[testimonialIndex].quote}&quot;</Text>
           <View style={styles.clientInfo}>
             <Text style={styles.name}>{testimonials[testimonialIndex].name}</Text>
@@ -190,6 +300,13 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     textAlign: 'center',
   },
+  starsContainer: {
+    flexDirection: 'row',
+    marginBottom: 15,
+  },
+  star: {
+    marginHorizontal: 2,
+  },
   quote: {
     fontStyle: 'italic',
     color: 'white',
@@ -239,15 +356,51 @@ const styles = StyleSheet.create({
     height: 12,
     borderRadius: 6,
   },
-  logoContainer: { flexDirection: 'row', alignItems: 'center' },
-  title: { fontSize: 20, fontWeight: 'bold', color: 'white', marginRight: 8 },
-  logo: { width: 40, height: 40 },
-  heading: {
-    fontSize: 22,
-    fontWeight: 'bold',
+  logoContainer: { 
+    flexDirection: 'row', 
+    alignItems: 'center' 
+  },
+  title: { 
+    fontSize: 20, 
+    fontWeight: 'bold', 
+    color: 'white', 
+    marginRight: 8 
+  },
+  logo: { 
+    width: 40, 
+    height: 40 
+  },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
     color: 'white',
+    fontSize: 16,
+    marginTop: 10,
+  },
+  errorText: {
+    color: 'white',
+    fontSize: 16,
     textAlign: 'center',
-    marginTop: 20,
+    marginTop: 10,
     marginHorizontal: 20,
+  },
+  subText: {
+    color: '#ddd',
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 5,
+  },
+  retryButton: {
+    marginTop: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 5,
+  },
+  retryButtonText: {
+    color: 'white',
+    fontSize: 16,
   },
 });

@@ -200,6 +200,7 @@ export default function EducationalAidsScreen({ route }) {
 
   useEffect(() => {
     const initializeScreen = async () => {
+      console.log('EducationalAidsScreen - Using BASE_URL:', BASE_URL);
       await loadUserData();
       await fetchScholarships();
       await checkReapplicationData();
@@ -231,9 +232,9 @@ export default function EducationalAidsScreen({ route }) {
       householdIncome: ''
     },
     documents: {
-      reportCard: null,
-      brgyClearance: null,
-      incomeCertificate: null,
+      reportCard: null, // COR
+      brgyClearance: null, // CTCG
+      incomeCertificate: null, // ITR
       otherDocuments: []
     },
     remarks: '',
@@ -330,6 +331,22 @@ export default function EducationalAidsScreen({ route }) {
       formDataToSend.append('status', 'pending');
       formDataToSend.append('remarks', formData.remarks || '');
 
+      // Add personal information
+      formDataToSend.append('firstName', formData.personalInfo.firstName);
+      formDataToSend.append('lastName', formData.personalInfo.lastName);
+      formDataToSend.append('email', formData.personalInfo.email);
+      formDataToSend.append('phone', formData.personalInfo.phone);
+
+      // Add residency information
+      formDataToSend.append('address', formData.residency.address);
+      formDataToSend.append('city', formData.residency.city);
+      formDataToSend.append('yearsResiding', formData.residency.yearsResiding);
+
+      // Add family background information
+      formDataToSend.append('parentsStatus', formData.familyBackground.parentsStatus);
+      formDataToSend.append('siblings', formData.familyBackground.siblings);
+      formDataToSend.append('householdIncome', formData.familyBackground.householdIncome);
+
       // Add reapplication data if this is a reapplication
       if (isReapplication) {
         formDataToSend.append('isReapplication', 'true');
@@ -338,11 +355,12 @@ export default function EducationalAidsScreen({ route }) {
 
       console.log('Submitting application data:', formDataToSend);
 
-      const response = await fetch(`${BASE_URL}/api/applications`, {
+      const response = await fetch(`${API_URL}/applications`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
+          'Accept': 'application/json',
+          'Content-Type': 'multipart/form-data'
         },
         body: formDataToSend
       });
@@ -364,7 +382,7 @@ export default function EducationalAidsScreen({ route }) {
       }
 
       // Send notification to admin
-      const adminNotificationResponse = await fetch(`${BASE_URL}/api/notifications`, {
+      const adminNotificationResponse = await fetch(`${API_URL}/notifications`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -487,6 +505,11 @@ export default function EducationalAidsScreen({ route }) {
                     </Text>
                   </View>
                 )}
+                <Text style={[styles.scholarshipStatus, {
+                  color: scholarship.status === 'active' ? '#4CAF50' : '#F44336'
+                }]}>
+                  Status: {scholarship.status.toUpperCase()}
+                </Text>
                 <Text style={styles.scholarshipName}>{scholarship.name}</Text>
                 <Text style={styles.scholarshipAmount}>Amount: ₱{scholarship.amount?.toLocaleString()}</Text>
                 <Text style={styles.scholarshipDeadline}>
@@ -706,7 +729,7 @@ export default function EducationalAidsScreen({ route }) {
                 styles.documentButtonText,
                 formData.documents.reportCard && styles.documentButtonTextUploaded
               ]}>
-                {formData.documents.reportCard ? 'Report Card Uploaded' : 'Upload Report Card'}
+                {formData.documents.reportCard ? 'Certificate of Registration (COR) Uploaded' : 'Upload Certificate of Registration (COR)'}
               </Text>
             </TouchableOpacity>
             
@@ -726,7 +749,7 @@ export default function EducationalAidsScreen({ route }) {
                 styles.documentButtonText,
                 formData.documents.brgyClearance && styles.documentButtonTextUploaded
               ]}>
-                {formData.documents.brgyClearance ? 'Barangay Clearance Uploaded' : 'Upload Barangay Clearance'}
+                {formData.documents.brgyClearance ? 'Certified True Copy of Grades (CTCG) Uploaded' : 'Upload Certified True Copy of Grades (CTCG)'}
               </Text>
             </TouchableOpacity>
             
@@ -746,7 +769,7 @@ export default function EducationalAidsScreen({ route }) {
                 styles.documentButtonText,
                 formData.documents.incomeCertificate && styles.documentButtonTextUploaded
               ]}>
-                {formData.documents.incomeCertificate ? 'Income Certificate Uploaded' : 'Upload Income Certificate'}
+                {formData.documents.incomeCertificate ? 'Income Tax Return (ITR) Uploaded' : 'Upload Income Tax Return (ITR) or Certificate of Indigency'}
               </Text>
             </TouchableOpacity>
 
@@ -815,13 +838,13 @@ export default function EducationalAidsScreen({ route }) {
             <View style={styles.reviewSection}>
               <Text style={styles.reviewTitle}>Uploaded Documents</Text>
               <Text style={styles.reviewText}>
-                {formData.documents.reportCard ? '✓' : '❌'} Report Card
+                {formData.documents.reportCard ? '✓' : '❌'} Certificate of Registration (COR)
               </Text>
               <Text style={styles.reviewText}>
-                {formData.documents.brgyClearance ? '✓' : '❌'} Barangay Clearance
+                {formData.documents.brgyClearance ? '✓' : '❌'} Certified True Copy of Grades (CTCG)
               </Text>
               <Text style={styles.reviewText}>
-                {formData.documents.incomeCertificate ? '✓' : '❌'} Income Certificate
+                {formData.documents.incomeCertificate ? '✓' : '❌'} Income Tax Return (ITR) or Certificate of Indigency
               </Text>
             </View>
 
@@ -948,6 +971,11 @@ export default function EducationalAidsScreen({ route }) {
                       <Text style={styles.appliedBadgeText}>Applied</Text>
                     </View>
                   )}
+                  <Text style={[styles.scholarshipStatus, {
+                    color: scholarship.status === 'active' ? '#4CAF50' : '#F44336'
+                  }]}>
+                    Status: {scholarship.status.toUpperCase()}
+                  </Text>
                   <Text style={styles.scholarshipName}>{scholarship.name}</Text>
                   <Text style={styles.scholarshipAmount}>Amount: ₱{scholarship.amount?.toLocaleString()}</Text>
                   <Text style={styles.scholarshipDeadline}>
@@ -1352,5 +1380,13 @@ const styles = StyleSheet.create({
   approvedButton: {
     backgroundColor: '#4CAF50',
     opacity: 0.7,
+  },
+  scholarshipStatus: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 5,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: -1, height: 1 },
+    textShadowRadius: 10
   },
 });

@@ -212,19 +212,19 @@ const ScholarshipScreen = () => {
       onPress={() => handleCardPress(item)}
     >
       <View style={styles.cardHeader}>
-        <MaterialIcons name={item.icon} size={28} color="#FFA000" style={styles.cardIcon} />
+        <MaterialIcons name={item.icon} size={30} color="#FFA000" style={styles.cardIcon} />
         <View style={styles.cardTextContainer}>
           <Text style={styles.scholarshipTitle}>{item.title}</Text>
           <Text style={styles.scholarshipDescription}>{item.description}</Text>
         </View>
       </View>
       <View style={styles.deadlineContainer}>
-        <Ionicons name="time-outline" size={16} color="white" />
+        <Ionicons name="time-outline" size={18} color="white" />
         <Text style={styles.deadlineText}>Deadline: {item.deadline}</Text>
       </View>
       <View style={styles.viewMoreContainer}>
         <Text style={styles.viewMoreText}>View Details</Text>
-        <Ionicons name="chevron-forward" size={18} color="#FFA000" />
+        <Ionicons name="chevron-forward" size={20} color="#FFA000" />
       </View>
     </TouchableOpacity>
   );
@@ -266,13 +266,20 @@ const ScholarshipScreen = () => {
         <View style={styles.detailHeader}>
           <MaterialIcons 
             name={selectedScholarship.icon} 
-            size={40} 
+            size={45} 
             color="#FFA000" 
             style={styles.detailIcon} 
           />
           <Text style={styles.detailTitle}>{selectedScholarship.title}</Text>
         </View>
         
+        <View style={styles.detailSection}>
+          <Text style={styles.sectionTitle}>STATUS</Text>
+          <View style={[styles.statusIndicator, selectedScholarship.status === 'Active' ? styles.statusActive : styles.statusInactive]}>
+            <Text style={styles.statusText}>{selectedScholarship.status}</Text>
+          </View>
+        </View>
+
         <View style={styles.detailSection}>
           <Text style={styles.sectionTitle}>DESCRIPTION</Text>
           <Text style={styles.sectionText}>{selectedScholarship.fullDescription}</Text>
@@ -299,7 +306,7 @@ const ScholarshipScreen = () => {
         <TouchableOpacity 
           style={styles.applyButton}
           activeOpacity={0.8}
-          onPress={() => navigation.navigate('Registration')}
+          onPress={() => navigation.navigate('EducationalAids')}
         >
           <LinearGradient 
             colors={['#FFD700', '#FFC107']} 
@@ -338,6 +345,12 @@ const ScholarshipScreen = () => {
           <Image source={require('../assets/logo.png')} style={styles.logo} />
         </View>
       </View>
+
+      {!selectedScholarship && !loading && scholarships.length > 0 && (
+        <View style={styles.pageHeaderContainer}>
+          <Text style={styles.pageHeaderTitle}>Available Scholarships</Text>
+        </View>
+      )}
 
       {selectedScholarship ? (
         renderScholarshipDetail()
@@ -407,61 +420,66 @@ const styles = StyleSheet.create({
   },
   scholarshipCard: {
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 12,
-    padding: 18,
-    marginBottom: 16,
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 18,
     borderWidth: 1,
-    borderColor: 'rgba(0, 170, 0, 0.2)',
+    borderColor: 'rgba(0, 170, 0, 0.3)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 6,
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 15,
   },
   cardIcon: {
-    marginRight: 15,
+    marginRight: 20,
   },
   cardTextContainer: {
     flex: 1,
   },
   scholarshipTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
     color: 'white',
-    marginBottom: 4,
+    marginBottom: 5,
   },
   scholarshipDescription: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
-    lineHeight: 20,
+    fontSize: 15,
+    color: 'rgba(255, 255, 255, 0.9)',
+    lineHeight: 22,
   },
   deadlineContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: 'rgba(0, 77, 0, 0.5)',
-    borderRadius: 8,
+    marginBottom: 15,
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    backgroundColor: 'rgba(0, 77, 0, 0.6)',
+    borderRadius: 10,
     alignSelf: 'flex-start',
   },
   deadlineText: {
     color: 'white',
-    marginLeft: 6,
-    fontSize: 13,
-    fontWeight: '500',
+    marginLeft: 8,
+    fontSize: 14,
+    fontWeight: '600',
   },
   viewMoreContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-end',
-    marginTop: 8,
+    marginTop: 10,
   },
   viewMoreText: {
     color: '#FFA000',
-    fontWeight: '600',
-    marginRight: 6,
-    fontSize: 14,
+    fontWeight: '700',
+    marginRight: 8,
+    fontSize: 15,
   },
   detailContainer: {
     flex: 1,
@@ -470,14 +488,14 @@ const styles = StyleSheet.create({
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: 18,
     paddingRight: 20,
     alignSelf: 'flex-start',
   },
   backText: {
     color: 'white',
     marginLeft: 8,
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '500',
   },
   detailContent: {
@@ -486,74 +504,89 @@ const styles = StyleSheet.create({
   detailHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 25,
+    marginBottom: 30,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.2)',
+    paddingBottom: 15,
   },
   detailIcon: {
-    marginRight: 15,
+    marginRight: 20,
   },
   detailTitle: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: 'bold',
     color: 'white',
     flex: 1,
-    lineHeight: 30,
+    lineHeight: 32,
   },
   detailSection: {
     marginBottom: 25,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 12,
+    padding: 15,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FFA000',
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: 'bold',
     color: '#FFA000',
-    marginBottom: 12,
+    marginBottom: 10,
     letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
   sectionText: {
-    fontSize: 15,
+    fontSize: 16,
     color: 'white',
-    lineHeight: 22,
+    lineHeight: 24,
   },
   bulletList: {
-    marginTop: 5,
+    marginTop: 8,
   },
   bulletItem: {
     flexDirection: 'row',
-    marginBottom: 8,
+    marginBottom: 10,
+    alignItems: 'flex-start',
   },
   bullet: {
     color: '#FFA000',
-    marginRight: 10,
-    fontSize: 16,
+    marginRight: 12,
+    fontSize: 18,
+    lineHeight: 24,
   },
   bulletText: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 16,
     color: 'white',
-    lineHeight: 22,
+    lineHeight: 24,
   },
   deadlineHighlight: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 77, 0, 0.5)',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 10,
+    backgroundColor: 'rgba(0, 77, 0, 0.7)',
+    padding: 15,
+    borderRadius: 10,
+    marginTop: 12,
+    alignSelf: 'flex-start',
   },
   deadlineDate: {
     color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 10,
+    fontSize: 17,
+    fontWeight: '700',
+    marginLeft: 12,
   },
   applyButton: {
-    marginTop: 30,
-    borderRadius: 8,
+    marginTop: 40,
+    borderRadius: 10,
     overflow: 'hidden',
-    elevation: 5,
-    boxShadow: '0px 4px 6px rgba(255, 165, 0, 0.3)',
+    elevation: 8,
+    shadowColor: '#FFA000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 6,
   },
   gradientButton: {
-    paddingVertical: 16,
+    paddingVertical: 18,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
@@ -561,9 +594,9 @@ const styles = StyleSheet.create({
   applyButtonText: {
     color: 'white',
     fontWeight: 'bold',
-    fontSize: 16,
-    letterSpacing: 0.5,
-    marginRight: 10,
+    fontSize: 18,
+    letterSpacing: 1,
+    marginRight: 12,
   },
   loadingContainer: {
     flex: 1,
@@ -572,8 +605,41 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     color: 'white',
-    marginTop: 10,
-    fontSize: 16,
+    marginTop: 15,
+    fontSize: 18,
+  },
+  pageHeaderContainer: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 15,
+    alignItems: 'center',
+  },
+  pageHeaderTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: 'white',
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: -1, height: 1 },
+    textShadowRadius: 5,
+  },
+  statusIndicator: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 15,
+    alignSelf: 'flex-start',
+    marginTop: 8,
+  },
+  statusActive: {
+    backgroundColor: '#4CAF50',
+  },
+  statusInactive: {
+    backgroundColor: '#F44336',
+  },
+  statusText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
   },
 });
 

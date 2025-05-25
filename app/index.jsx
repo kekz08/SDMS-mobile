@@ -29,103 +29,118 @@ import ScholarshipManagementScreen from '../screens/ScholarshipManagementScreen'
 import ApplicationReviewScreen from '../screens/ApplicationReviewScreen';
 import ReportsScreen from '../screens/ReportsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import AdminProfileScreen from '../screens/AdminProfileScreen';
+import RateUsScreen from '../screens/RateUsScreen';
 
 const Drawer = createDrawerNavigator();
 
-// Guest Drawer
+// Guest Drawer Navigator - Accessible when not logged in
 function GuestDrawer({ onLogin }) {
   return (
     <Drawer.Navigator
       drawerContent={(props) => <CustomDrawerContent {...props} />}
-      screenOptions={{
-        headerShown: false,
-        drawerStyle: { backgroundColor: '#fff', width: 250 },
-      }}
+      screenOptions={{ headerShown: false }}
     >
       <Drawer.Screen name="Home" component={LandingPage} />
       <Drawer.Screen name="Scholarship" component={ScholarshipScreen} />
       <Drawer.Screen name="Features" component={FeaturesScreen} />
       <Drawer.Screen name="Testimonials" component={TestimonialsScreen} />
       <Drawer.Screen name="About" component={AboutScreen} />
-      <Drawer.Screen name="Registration" component={Register} />
-      <Drawer.Screen name="FeatureDetail" component={FeatureDetailScreen} />
-      <Drawer.Screen name="Contact" component={ContactScreen} />
-      <Drawer.Screen name="Login">
-        {(props) => <LoginScreen {...props} onLogin={onLogin} />}
-      </Drawer.Screen>
+      {/* Include both Dashboard screens here, but don't show in drawer */}
+      <Drawer.Screen
+        name="Dashboard"
+        component={DashboardScreen}
+        options={{ drawerItemStyle: { height: 0 } }} // Hide from drawer
+      />
+      <Drawer.Screen
+        name="AdminDashboard"
+        component={AdminDashboardScreen}
+        options={{ drawerItemStyle: { height: 0 } }} // Hide from drawer
+      />
+      {/* Login screen handles the login logic and navigates away */}
+      <Drawer.Screen name="Login" component={LoginScreen} initialParams={{ onLogin }} />
+      <Drawer.Screen name="Register" component={Register} />
     </Drawer.Navigator>
   );
 }
 
-// Admin Drawer
+// Admin Drawer - Accessible when logged in as admin
 function AdminDrawer({ onLogout }) {
   return (
     <Drawer.Navigator
       drawerContent={(props) => <AdminDrawerContent {...props} onLogout={onLogout} />}
       screenOptions={{
         headerShown: false,
-        drawerStyle: { 
-          backgroundColor: '#fff', 
-          width: 280 
+        drawerStyle: {
+          backgroundColor: '#fff',
+          width: 280
         },
       }}
       initialRouteName="AdminDashboard"
     >
-      <Drawer.Screen 
-        name="AdminDashboard" 
+      <Drawer.Screen
+        name="AdminDashboard"
         component={AdminDashboardScreen}
-        options={{ 
+        options={{
           drawerLabel: 'Dashboard',
           title: 'Admin Dashboard'
         }}
       />
-      <Drawer.Screen 
-        name="UserManagement" 
+      <Drawer.Screen
+        name="UserManagement"
         component={UserManagementScreen}
         options={{
           title: 'User Management'
         }}
       />
-      <Drawer.Screen 
-        name="ScholarshipManagement" 
+      <Drawer.Screen
+        name="ScholarshipManagement"
         component={ScholarshipManagementScreen}
         options={{
           title: 'Scholarship Management'
         }}
       />
-      <Drawer.Screen 
-        name="ApplicationReview" 
+      <Drawer.Screen
+        name="ApplicationReview"
         component={ApplicationReviewScreen}
         options={{
           title: 'Application Review'
         }}
       />
-      <Drawer.Screen 
-        name="Announcements" 
+      <Drawer.Screen
+        name="Announcements"
         component={AnnouncementScreen}
         options={{
           title: 'Announcements'
         }}
       />
-      <Drawer.Screen 
-        name="AdminConcerns" 
+      <Drawer.Screen
+        name="AdminConcerns"
         component={AdminConcernScreen}
         options={{
           title: 'User Concerns'
         }}
       />
-      <Drawer.Screen 
-        name="Reports" 
+      <Drawer.Screen
+        name="Reports"
         component={ReportsScreen}
         options={{
           title: 'Reports'
         }}
       />
-      <Drawer.Screen 
-        name="Settings" 
+      <Drawer.Screen
+        name="Settings"
         component={SettingsScreen}
         options={{
           title: 'Settings'
+        }}
+      />
+      <Drawer.Screen
+        name="AdminProfile"
+        component={AdminProfileScreen}
+        options={{
+          drawerLabel: 'Admin Profile',
+          title: 'Admin Profile'
         }}
       />
     </Drawer.Navigator>
@@ -149,6 +164,7 @@ function UserDrawer({ onLogout }) {
       <Drawer.Screen name="Announcements" component={UserAnnouncementScreen} />
       <Drawer.Screen name="Concerns" component={Concern} />
       <Drawer.Screen name="Profile" component={Profile} />
+      <Drawer.Screen name="Rate Us" component={RateUsScreen} />
     </Drawer.Navigator>
   );
 }
@@ -201,10 +217,11 @@ export default function AppNavigator() {
   }
 
   if (!isLoggedIn) {
+    // When not logged in, render the GuestDrawer which includes login and relevant screens
     return <GuestDrawer onLogin={handleLogin} />;
   }
 
-  // Return appropriate drawer based on user role
+  // When logged in, conditionally render AdminDrawer or UserDrawer
   return userRole === 'admin' ? (
     <AdminDrawer onLogout={handleLogout} />
   ) : (

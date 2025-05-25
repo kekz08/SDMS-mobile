@@ -15,7 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL, BASE_URL } from '../config';
 
-export default function UserManagementScreen({ navigation }) {
+export default function UserManagementScreen({ navigation, route }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -23,6 +23,14 @@ export default function UserManagementScreen({ navigation }) {
   const [selectedUser, setSelectedUser] = useState(null);
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [error, setError] = useState(null);
+  const [filterType, setFilterType] = useState('all'); // 'all' or 'pending'
+
+  // Set initial filter type from route params
+  useEffect(() => {
+    if (route.params?.initialFilter) {
+      setFilterType(route.params.initialFilter);
+    }
+  }, [route.params?.initialFilter]);
 
   useEffect(() => {
     fetchUsers();
@@ -30,15 +38,23 @@ export default function UserManagementScreen({ navigation }) {
 
   useEffect(() => {
     if (users.length > 0) {
-      const filtered = users.filter(user =>
-        user.firstName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.lastName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.studentId?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+      const filtered = users.filter(user => {
+        const matchesSearch = 
+          user.firstName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          user.lastName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          user.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          user.studentId?.toLowerCase().includes(searchQuery.toLowerCase());
+        
+        const isReallyVerified = user.role === 'admin' || user.isVerified === true || user.isVerified === 1 || user.isVerified === '1';
+
+        const matchesFilter = 
+          filterType === 'all' || (filterType === 'pending' && !isReallyVerified);
+
+        return matchesSearch && matchesFilter;
+      });
       setFilteredUsers(filtered);
     }
-  }, [searchQuery, users]);
+  }, [searchQuery, users, filterType]); // Add filterType dependency
 
   const fetchUsers = async () => {
     try {
@@ -77,7 +93,7 @@ export default function UserManagementScreen({ navigation }) {
       );
 
       setUsers(validUsers);
-      setFilteredUsers(validUsers);
+      // Initial filtering will be handled by the useEffect reacting to users and filterType
       setError(null);
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -331,6 +347,29 @@ export default function UserManagementScreen({ navigation }) {
         />
       </View>
 
+      {/* Filter Buttons */}
+      <View style={styles.filterContainer}>
+        <TouchableOpacity
+          style={[styles.filterButton, filterType === 'all' && styles.activeFilterButton]}
+          onPress={() => setFilterType('all')}
+        >
+          <Text style={[styles.filterButtonText, filterType === 'all' && styles.activeFilterButtonText]}>All Users</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.filterButton, filterType === 'pending' && styles.activeFilterButton]}
+          onPress={() => setFilterType('pending')}
+        >
+          <Text style={[styles.filterButtonText, filterType === 'pending' && styles.activeFilterButtonText]}>Pending Verifications</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* User Count */}
+      {!loading && filteredUsers.length > 0 && (
+        <Text style={styles.userCountText}>
+          Showing {filteredUsers.length} {filterType === 'pending' ? 'pending' : 'total'} {filteredUsers.length === 1 ? 'user' : 'users'}
+        </Text>
+      )}
+
       {loading ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="white" />
@@ -348,7 +387,7 @@ export default function UserManagementScreen({ navigation }) {
         <View style={styles.centerContainer}>
           <Ionicons name="people-outline" size={50} color="rgba(255, 255, 255, 0.5)" />
           <Text style={styles.noDataText}>
-            {searchQuery ? 'No users match your search' : 'No users found'}
+            {searchQuery ? 'No users match your search' : filterType === 'pending' ? 'No pending users found' : 'No users found'}
           </Text>
         </View>
       ) : (
@@ -408,13 +447,19 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: 'bold',
     color: 'white',
     flex: 1,
+    marginLeft: 10,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: -1, height: 1 },
+    textShadowRadius: 10
   },
   refreshButton: {
     padding: 5,
@@ -444,6 +489,31 @@ const styles = StyleSheet.create({
     color: '#222',
     paddingVertical: 6,
     backgroundColor: 'transparent',
+  },
+  filterContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginHorizontal: 18,
+    marginBottom: 10,
+    marginTop: 5,
+  },
+  filterButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 20,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    marginHorizontal: 5,
+  },
+  activeFilterButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+  },
+  filterButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  activeFilterButtonText: {
+    color: '#008000',
   },
   userCard: {
     backgroundColor: '#fff',
@@ -490,7 +560,10 @@ const styles = StyleSheet.create({
     marginHorizontal: 18,
     borderRadius: 1,
   },
-  actionButtons: { flexDirection: 'column', gap: 12 },
+  actionButtons: {
+    flexDirection: 'column',
+    gap: 12,
+  },
   actionButton: {
     width: 44,
     height: 44,
@@ -515,23 +588,28 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: 'white',
+    textAlign: 'center',
     marginTop: 10,
+    marginBottom: 20,
   },
   retryButton: {
-    padding: 10,
-    backgroundColor: '#2196F3',
-    borderRadius: 5,
+    backgroundColor: '#FFA000',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+    elevation: 3,
   },
   retryButtonText: {
-    fontSize: 18,
-    fontWeight: 'bold',
     color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
   noDataText: {
     fontSize: 18,
     fontWeight: 'bold',
     color: 'white',
     marginTop: 10,
+    textAlign: 'center',
   },
   modalContainer: {
     flex: 1,
@@ -554,26 +632,41 @@ const styles = StyleSheet.create({
   modalSubtitle: {
     fontSize: 16,
     marginBottom: 10,
+    color: '#666',
   },
   input: {
     width: '100%',
-    padding: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 5,
-    color: 'white',
-    marginBottom: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 8,
+    color: '#333',
+    marginBottom: 15,
+    backgroundColor: '#f9f9f9',
   },
   updateButton: {
-    padding: 10,
-    backgroundColor: '#2196F3',
-    borderRadius: 5,
+    backgroundColor: '#008000',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+    elevation: 3,
   },
   updateButtonText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
     color: 'white',
   },
   listContainer: {
-    padding: 10,
+    padding: 18,
+    paddingTop: 0,
+  },
+  userCountText: {
+    color: 'white',
+    textAlign: 'center',
+    fontSize: 14,
+    marginBottom: 10,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: -1, height: 1 },
+    textShadowRadius: 10,
   },
 });

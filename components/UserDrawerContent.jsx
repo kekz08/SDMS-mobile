@@ -24,7 +24,7 @@ export default function UserDrawerContent({ navigation, onLogout }) {
       if (userDataString) {
         const parsedUserData = JSON.parse(userDataString);
         setUserData(parsedUserData);
-        
+
         if (parsedUserData.profileImage) {
           try {
             let imageUrl = parsedUserData.profileImage;
@@ -88,10 +88,10 @@ export default function UserDrawerContent({ navigation, onLogout }) {
         </Text>
       )}
       icon={({ size }) => (
-        <Ionicons 
-          name={icon} 
-          size={size} 
-          color={isLogout ? '#F44336' : '#FFFFFF'} 
+        <Ionicons
+          name={icon}
+          size={size}
+          color={isLogout ? '#F44336' : '#FFFFFF'}
         />
       )}
       onPress={onPress}
@@ -108,7 +108,7 @@ export default function UserDrawerContent({ navigation, onLogout }) {
         colors={['#005500', '#007000', '#009000']}
         style={styles.gradient}
       />
-      
+
       <DrawerContentScrollView style={styles.scrollView}>
         <View style={styles.drawerHeader}>
           <Image
@@ -116,9 +116,14 @@ export default function UserDrawerContent({ navigation, onLogout }) {
             style={styles.profileImage}
           />
           <View style={styles.userInfo}>
-            <Text style={styles.userName}>
-              {userData ? `${userData.firstName} ${userData.lastName}` : 'Loading...'}
-            </Text>
+            {userData ? (
+              <Text style={styles.userName}>
+                {`${userData.firstName} ${userData.lastName}`}
+              </Text>
+            ) : (
+              <Text style={styles.userName}>Loading...</Text>
+            )}
+
             <Text style={styles.userRole}>Student</Text>
             {userData?.isVerified ? (
               <View style={styles.verifiedBadge}>
@@ -156,7 +161,7 @@ export default function UserDrawerContent({ navigation, onLogout }) {
               />
 
               <CustomDrawerItem
-                label="Announcements"
+                label="Announcement"
                 icon="megaphone-outline"
                 onPress={() => navigation.navigate('Announcements')}
               />
@@ -172,8 +177,16 @@ export default function UserDrawerContent({ navigation, onLogout }) {
                 icon="person-outline"
                 onPress={() => navigation.navigate('Profile')}
               />
+
+              <CustomDrawerItem
+                label="Rate Us"
+                icon="heart-outline"
+                onPress={() => navigation.navigate('Rate Us')}
+              />
             </>
           )}
+
+
         </View>
 
         <View style={styles.bottomDrawerSection}>
