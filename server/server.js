@@ -6,14 +6,40 @@ const db = require('./config/db');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const nodemailer = require('nodemailer');
 const { authenticateToken, isAdmin } = require('./middleware/auth');
 require('dotenv').config();
 
 // Import config
 const config = require('../config').default;
 
+// Create email transporter
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+});
+
 // Import ratings routes
 const ratingsRouter = require('./routes/ratings');
+
+// Add rate limiting middleware
+const rateLimit = require('express-rate-limit');
+
+// Create rate limiters
+const forgotPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 requests per window
+  message: { message: 'Too many password reset attempts. Please try again later.' }
+});
+
+const verifyCodeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // 10 attempts per window
+  message: { message: 'Too many verification attempts. Please try again later.' }
+});
 
 const app = express();
 
@@ -2250,6 +2276,225 @@ app.get('/api/admin/concerns', authenticateToken, isAdmin, async (req, res) => {
 
 // Add ratings routes
 app.use('/api/ratings', ratingsRouter);
+
+// Forgot password endpoint with rate limiting
+app.post('/api/v1/forgot-password', forgotPasswordLimiter, async (req, res) => {
+  try {
+    console.log('=== Forgot Password Request ===');
+    const { email } = req.body;
+    const clientIP = req.ip || req.connection.remoteAddress;
+    console.log('Email:', email);
+    console.log('Client IP:', clientIP);
+
+    if (!email) {
+      console.log('No email provided');
+      return res.status(400).json({ message: 'Email is required' });
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      console.log('Invalid email format:', email);
+      return res.status(400).json({ message: 'Invalid email format' });
+    }
+
+    // Check if user exists
+    const [users] = await db.execute('SELECT id, firstName, lastName FROM users WHERE email = ?', [email]);
+    
+    if (users.length === 0) {
+      console.log('No user found with email:', email);
+      return res.status(404).json({ message: 'No account found with this email' });
+    }
+
+    // Generate a 6-digit verification code
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    console.log('Generated verification code for user:', users[0].id);
+    
+    try {
+      // Store the verification code in the database with an expiration time (15 minutes)
+      await db.execute(
+        'INSERT INTO password_resets (userId, code, expiresAt, ipAddress) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 15 MINUTE), ?)',
+        [users[0].id, verificationCode, clientIP]
+      );
+      console.log('Verification code stored in database');
+
+      // Send email with verification code
+      const mailOptions = {
+        from: process.env.EMAIL_USER,
+        to: email,
+        subject: 'Password Reset Verification Code',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #008000;">Password Reset Request</h2>
+            <p>Hello ${users[0].firstName} ${users[0].lastName},</p>
+            <p>We received a request to reset your password. Please use the following verification code to proceed:</p>
+            <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; text-align: center; margin: 20px 0;">
+              <h1 style="color: #008000; margin: 0; font-size: 32px;">${verificationCode}</h1>
+            </div>
+            <p>This code will expire in 15 minutes.</p>
+            <p>If you didn\'t request this password reset, please ignore this email or contact support if you have concerns.</p>
+            <p>Best regards,<br>SDMS Team</p>
+          </div>
+        `
+      };
+
+      try {
+        await transporter.sendMail(mailOptions);
+        console.log('Verification email sent successfully');
+      } catch (emailError) {
+        console.error('Error sending verification email:', emailError);
+        // Optionally, throw the error to be caught by the outer block
+        // throw emailError; 
+      }
+
+      res.json({ 
+        message: 'Verification code sent to your email',
+        // In production, remove this line
+        code: verificationCode 
+      });
+    } catch (dbError) {
+      console.error('Database error storing verification code:', dbError);
+      throw new Error('Failed to store verification code');
+    }
+  } catch (error) {
+    console.error('Error in forgot password:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      sqlState: error.sqlState,
+      sqlMessage: error.sqlMessage
+    });
+    res.status(500).json({ 
+      message: 'Failed to process forgot password request',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Verify code endpoint with rate limiting
+app.post('/api/v1/verify-code', verifyCodeLimiter, async (req, res) => {
+  try {
+    console.log('=== Verify Code Request ===');
+    const { email, code } = req.body;
+    const clientIP = req.ip || req.connection.remoteAddress;
+    console.log('Email:', email);
+    console.log('Code:', code);
+    console.log('Client IP:', clientIP);
+
+    if (!email || !code) {
+      console.log('Missing required fields');
+      return res.status(400).json({ message: 'Email and code are required' });
+    }
+
+    // Get user ID
+    const [users] = await db.execute('SELECT id FROM users WHERE email = ?', [email]);
+    if (users.length === 0) {
+      console.log('User not found:', email);
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    console.log('Checking verification code for user:', users[0].id);
+    // Check if code is valid and not expired
+    const [resetCodes] = await db.execute(
+      'SELECT * FROM password_resets WHERE userId = ? AND code = ? AND expiresAt > NOW() AND used = FALSE AND ipAddress = ?',
+      [users[0].id, code, clientIP]
+    );
+
+    if (resetCodes.length === 0) {
+      console.log('Invalid or expired code');
+      return res.status(400).json({ message: 'Invalid or expired code' });
+    }
+
+    console.log('Code verified successfully');
+    res.json({ message: 'Code verified successfully' });
+  } catch (error) {
+    console.error('Error verifying code:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      sqlState: error.sqlState,
+      sqlMessage: error.sqlMessage
+    });
+    res.status(500).json({ 
+      message: 'Failed to verify code',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Reset password endpoint
+app.post('/api/v1/reset-password', verifyCodeLimiter, async (req, res) => {
+  try {
+    console.log('=== Reset Password Request ===');
+    const { email, code, newPassword } = req.body;
+    const clientIP = req.ip || req.connection.remoteAddress;
+    console.log('Email:', email);
+    console.log('Code:', code);
+    console.log('Client IP:', clientIP);
+
+    if (!email || !code || !newPassword) {
+      console.log('Missing required fields');
+      return res.status(400).json({ message: 'All fields are required' });
+    }
+
+    // Password strength validation
+    if (newPassword.length < 8) {
+      console.log('Password too short');
+      return res.status(400).json({ message: 'Password must be at least 8 characters long' });
+    }
+
+    // Get user ID
+    const [users] = await db.execute('SELECT id FROM users WHERE email = ?', [email]);
+    if (users.length === 0) {
+      console.log('User not found:', email);
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    console.log('Verifying code for user:', users[0].id);
+    // Verify code
+    const [resetCodes] = await db.execute(
+      'SELECT * FROM password_resets WHERE userId = ? AND code = ? AND expiresAt > NOW() AND used = FALSE AND ipAddress = ?',
+      [users[0].id, code, clientIP]
+    );
+
+    if (resetCodes.length === 0) {
+      console.log('Invalid or expired code');
+      return res.status(400).json({ message: 'Invalid or expired code' });
+    }
+
+    console.log('Code verified, updating password');
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update password and mark code as used
+    await db.execute('UPDATE users SET password = ? WHERE id = ?', [hashedPassword, users[0].id]);
+    await db.execute('UPDATE password_resets SET used = TRUE WHERE id = ?', [resetCodes[0].id]);
+
+    // Clear any other unused reset codes for this user
+    await db.execute(
+      'UPDATE password_resets SET used = TRUE WHERE userId = ? AND used = FALSE',
+      [users[0].id]
+    );
+
+    console.log('Password reset successful');
+    res.json({ message: 'Password reset successful' });
+  } catch (error) {
+    console.error('Error resetting password:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      sqlState: error.sqlState,
+      sqlMessage: error.sqlMessage
+    });
+    res.status(500).json({ 
+      message: 'Failed to reset password',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
 
 const PORT = config.PORT || 3000;
 const HOST = '0.0.0.0';  // Force binding to all interfaces

@@ -167,6 +167,17 @@ export default function LoginScreen({ onLogin, onLogout }) {
     }
   };
 
+  const handleForgotPassword = () => {
+    console.log('Forgot Password button clicked');
+    console.log('Navigating to ForgotPassword screen');
+    try {
+      navigation.navigate('ForgotPassword');
+    } catch (error) {
+      console.error('Navigation error:', error);
+      Alert.alert('Error', 'Failed to navigate to forgot password screen');
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -241,7 +252,11 @@ export default function LoginScreen({ onLogin, onLogout }) {
                   </TouchableOpacity>
                 </View>
 
-                <TouchableOpacity style={styles.forgotPassword}>
+                <TouchableOpacity 
+                  style={[styles.forgotPassword, { opacity: 1 }]}
+                  onPress={handleForgotPassword}
+                  activeOpacity={0.7}
+                >
                   <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
                 </TouchableOpacity>
               </View>
